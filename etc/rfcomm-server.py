@@ -100,8 +100,8 @@ def update_controller(commandnmbr, arg):
 						file_urls.append(file.raw_url)
 			if len(file_urls) > 0:
 				#print(file_urls)
-				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
-				#send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
+				# send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
+				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
 			else:
 				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE))
 
@@ -231,6 +231,7 @@ def ethernet_settings(commandnmbr, arg):
 	level1 = ord(arg[0])
 	global mode
 	arg = arg[1:]
+
 	if level1 == commands.INIT_ETHERNET_SETTINGS:
 		#get the list of connections
 		stdout = subprocess.run(["nmcli", "con"], stdout=subprocess.PIPE, text=True)
@@ -245,7 +246,10 @@ def ethernet_settings(commandnmbr, arg):
 				else:
 					mode= "auto"
 		#get the current ip address of the eth0 interface
-		ip = ni.ifaddresses("eth0")[ni.AF_INET][0]["addr"]
+		try:
+			ip = ni.ifaddresses("eth0")[ni.AF_INET][0]["addr"]
+		except KeyError:
+			ip = "no IP available"
 		#get the static ip from the connection file
 		with open(path, "r") as con:
 			ip_line = get_line(path, "address1=")
@@ -254,6 +258,8 @@ def ethernet_settings(commandnmbr, arg):
 			ip_static = ip_static.split("/")[0]
 		#send all gathered information plus the connection status
 		send(chr(commandnmbr) + chr(commands.INIT_ETHERNET_SETTINGS) + mode + ":" + ip_static + ":" + ip + ":" + str(check_connection(1)) )
+
+
 	elif level1 == commands.SET_ETHERNET_SETTINGS:
 		ip_line = get_line(path, "address1=")
 		with open(path, "r") as con:
@@ -267,6 +273,8 @@ def ethernet_settings(commandnmbr, arg):
 			subprocess.run(["nmcli", "con", "up", "Wired connection static"])
 			time.sleep(0.5)
 		ethernet_settings(commandnmbr, chr(commands.INIT_ETHERNET_SETTINGS) + "")
+
+
 	elif level1 == commands.SWITCH_ETHERNET_MODE:
 		if arg == "true":
 			subprocess.run(["nmcli", "con", "up", "Wired connection static"])
@@ -293,12 +301,16 @@ def wireless_settings(commandnmbr, arg):
 			connection_status = "True"
 		else:
 			connection_status = "False"
+		try:
+			ip = ni.ifaddresses("wlan0")[ni.AF_INET][0]["addr"]
+		except KeyError:
+			ip = "no IP available"
 		if "GOcontroll-ap" in status: 
 			status = "ap"
-			send(chr(commands.WIRELESS_SETTINGS) + chr(commands.INIT_WIRELESS_SETTINGS) + status + ":" + connection_status)
+			send(chr(commands.WIRELESS_SETTINGS) + chr(commands.INIT_WIRELESS_SETTINGS) + status + ":" + connection_status + ":" + ip)
 		else:
 			status = "wifi"
-			send(chr(commands.WIRELESS_SETTINGS) + chr(commands.INIT_WIRELESS_SETTINGS) + status + ":" + connection_status)
+			send(chr(commands.WIRELESS_SETTINGS) + chr(commands.INIT_WIRELESS_SETTINGS) + status + ":" + connection_status + ":" + ip)
 	
 	
 	elif level1 == commands.GET_WIFI_NETWORKS:
@@ -361,14 +373,15 @@ def wireless_settings(commandnmbr, arg):
 			connection_result = commands.WIFI_CONNECT_SUCCESS
 		elif (resultstring.find("Secrets")!=-1):
 			connection_result = commands.WIFI_CONNECT_FAILED_INC_PW
+			subprocess.run(["nmcli", "connection", "delete", "id", message_list[0]])
 		elif (resultstring.find("SSID")!=-1):
 			connection_result = commands.WIFI_CONNECT_FAILED_INC_SSID
+			subprocess.run(["nmcli", "connection", "delete", "id", message_list[0]])
 		else:
 			connection_result = commands.WIFI_CONNECT_FAILED_UNKNOWN
+			subprocess.run(["nmcli", "connection", "delete", "id", message_list[0]])
 		#give feedback to the app
-		send(chr(commandnmbr) + chr(connection_result))
-		#update wifi list to change the state of the network
-		wireless_settings(commandnmbr, chr(commands.GET_WIFI_NETWORKS))
+		send(chr(commandnmbr) + chr(commands.CONNECT_TO_WIFI) + chr(connection_result))
 
 	
 	elif level1 == commands.DISCONNECT_FROM_WIFI:
@@ -385,9 +398,7 @@ def wireless_settings(commandnmbr, arg):
 		else:
 			disconnection_result = commands.WIFI_DISCONNECT_FAILED
 		#give feedback to the app
-		send(chr(commandnmbr) + chr(disconnection_result))
-		#update wifi list to change the state of the network
-		wireless_settings(commandnmbr, chr(commands.GET_WIFI_NETWORKS))
+		send(chr(commandnmbr) + chr(commands.DISCONNECT_FROM_WIFI) + chr(disconnection_result))
 
 
 	
@@ -396,16 +407,16 @@ def wireless_settings(commandnmbr, arg):
 			stdout = subprocess.run(["nmcli", "con", "up", "GOcontroll-ap"], stdout=subprocess.PIPE, text=True)
 			result = stdout.stdout
 			if "successfully" in result:
-				send(chr(commandnmbr) + chr(commands.SWITCH_MODE) + "ap")
+				send(chr(commandnmbr) + chr(commands.SWITCH_WIRELESS_MODE) + "ap")
 			else:
-				send(chr(commandnmbr) + chr(commands.SWITCH_MODE) + "error")
+				send(chr(commandnmbr) + chr(commands.SWITCH_WIRELESS_MODE) + "error")
 		elif arg == "wifi":
 			stdout = subprocess.run(["nmcli", "con", "down", "GOcontroll-ap"], stdout=subprocess.PIPE, text=True)
 			result = stdout.stdout
 			if "successfully" in result:
-				send(chr(commandnmbr) + chr(commands.SWITCH_MODE) + "wifi")
+				send(chr(commandnmbr) + chr(commands.SWITCH_WIRELESS_MODE) + "wifi")
 			else:
-				send(chr(commandnmbr) + chr(commands.SWITCH_MODE) + "error")
+				send(chr(commandnmbr) + chr(commands.SWITCH_WIRELESS_MODE) + "error")
 
 
 	
@@ -835,6 +846,8 @@ def data_received(data):
 			print(data)
 			#extract the argument from the message
 			data = data[1:]
+			#get message till stopbyte
+			data = data.split(bytes([255]))[0]
 			#run through the commands list
 			command_list(first_byte, data)
 		else:
