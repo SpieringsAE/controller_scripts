@@ -1,5 +1,4 @@
 #!/bin/sh
-####
 
 
 hciattach /dev/ttymxc0 bcm43xx 921600 flow
