@@ -17,6 +17,8 @@ Help()
 
 Commit()
 {
+	cd /controller_scripts/
+
 	cp /usr/moduline/bash/go-bluetooth-start.sh /controller_scripts/usr/moduline/bash/go-bluetooth-start.sh
 
 	cp /usr/moduline/python/make-agent.py /controller_scripts/usr/moduline/python/make-agent.py
@@ -29,15 +31,19 @@ Commit()
 
 	git add /controller_scripts/
 
-	git commit 
+	git commit
 
 	git push
+
+	cd ../
 }
 
 #pull changes
 
 Pull()
 {
+	cd /controller_scripts/
+
 	git pull
 
 	cp /controller_scripts/usr/moduline/bash/go-bluetooth-start.sh /usr/moduline/bash/go-bluetooth-start.sh
@@ -49,6 +55,8 @@ Pull()
 	cp /controller_scripts/etc/rfcomm-server.py /etc/rfcomm-server.py
 
 	cp /controller_scripts/etc/git-bash.sh /etc/git-bash.sh
+
+	cd ../
 }
 
 ##################################################################################################################
