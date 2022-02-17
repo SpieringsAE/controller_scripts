@@ -23,6 +23,8 @@ Commit()
 
 	cp /lib/systemd/system/go-bluetooth.service /controller_scripts/lib/systemd/system/go-bluetooth.service
 
+	cp /etc/rfcomm-server.py /controller_scripts/etc/rfcomm-server.py
+
 	cp /etc/git-bash.sh /controller_scripts/etc/git-bash.sh
 
 	git add /controller_scripts/
@@ -44,8 +46,13 @@ Pull()
 
 	cp /controller_scripts/lib/systemd/system/go-bluetooth.service /lib/systemd/system/go-bluetooth.service
 
+	cp /controller_scripts/etc/rfcomm-server.py /etc/rfcomm-server.py
+
 	cp /controller_scripts/etc/git-bash.sh /etc/git-bash.sh
 }
+
+##################################################################################################################
+#main
 
 while getopts ":hcp" option; do
 	case $option in
