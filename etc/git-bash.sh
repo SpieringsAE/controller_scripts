@@ -1,13 +1,67 @@
 #!/bin/sh
 
-cp /usr/moduline/bash/go-bluetooth-start.sh /controller_scripts/usr/moduline/bash/go-bluetooth-start.sh
+#display Help
+Help()
+{
+	echo "this functions commits and pushes changes but also pulls them from github"
+	echo
+	echo "Syntax: scriptTemplate [-h|c|p]"
+	echo "options:"
+	echo "h		Displays help"
+	echo "c		adds changes to staging area, commits and pushes them"
+	echo "p		pulls changes from github"
+	echo
+}
 
-cp /usr/moduline/python/make-agent.py /controller_scripts/usr/moduline/python/make-agent.py
+#commit changes
 
-cp /lib/systemd/system/go-bluetooth.service /controller_scripts/lib/systemd/system/go-bluetooth.service
+Commit()
+{
+	cp /usr/moduline/bash/go-bluetooth-start.sh /controller_scripts/usr/moduline/bash/go-bluetooth-start.sh
 
-git add /controller_scripts/
+	cp /usr/moduline/python/make-agent.py /controller_scripts/usr/moduline/python/make-agent.py
 
-git commit
+	cp /lib/systemd/system/go-bluetooth.service /controller_scripts/lib/systemd/system/go-bluetooth.service
 
-git push
+	cp /etc/git-bash.sh /controller_scripts/etc/git-bash.sh
+
+	git add /controller_scripts/
+
+	git commit 
+
+	git push
+}
+
+#pull changes
+
+Pull()
+{
+	git pull
+
+	cp /controller_scripts/usr/moduline/bash/go-bluetooth-start.sh /usr/moduline/bash/go-bluetooth-start.sh
+
+	cp /controller_scripts/usr/moduline/python/make-agent.py /usr/moduline/python/make-agent.py
+
+	cp /controller_scripts/lib/systemd/system/go-bluetooth.service /lib/systemd/system/go-bluetooth.service
+
+	cp /controller_scripts/etc/git-bash.sh /etc/git-bash.sh
+}
+
+while getopts ":hcp" option; do
+	case $option in
+		h) # display Help
+			Help
+			exit;;
+		c) # Commit changes
+			Commit
+			exit;;
+		p) # Pulls changes
+			Pull
+			exit;;
+	       \?) # Invalid option
+			echo "error: Invalid option"
+			exit;;
+	esac
+done
+
+
