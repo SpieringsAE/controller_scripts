@@ -23,11 +23,13 @@ def update_controller(commandnmbr, arg):
 ###########################################################################################
 
 #get the version of the controller (potentially match this with updates to the app to determine whether the controller could be updated)
+#runs when phone and controller are connected
 
 def get_controller_version(commandnmbr, arg):
 	print(arg)
-	s.send(chr(commandnmbr) + open("/sys/firmware/devicetree/base/hardware", "r").read())
-	#runs when phone and controller are connected triggers update button on the app in the future?
+	s.send(chr(commandnmbr) + "hw" + open("/sys/firmware/devicetree/base/hardware", "r").read() + "sw") #add software version
+
+#TODO triggers update button on the app in the future?
 
 ###########################################################################################
 
