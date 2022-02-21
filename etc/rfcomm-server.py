@@ -40,9 +40,28 @@ def get_controller_version(commandnmbr, arg):
 
 
 def get_wifi_networks(commandnmbr, arg):
-	#nmcli dev wifi -t (gets the list in a layout optimal for scripting)
-	#formatteer data
-	#s.send(netwerken)
+	#get the list of networks available to the controller
+	wifi_list = subprocess.run(["nmcli", "-t", "dev", "wifi"], stdout=subprocess.PIPE, text=True) #(gets the list in a layout optimal for scripting, networks seperated by \n, columns seperated by :)
+	#split up the data and filter the important information
+	networks = wifi_list.stdout[:-1].split("\n") #split the list at \n characters
+	i=len(networks)-1 #set up a variable to loop through the list from the back
+	for n in range(len(networks)):
+		networks[i] = networks[i].split(":") #split every network up into its components at the : characters
+		if networks[i][1]=="": #if this is true the current index contains a network with no name
+			networks.pop(i) #remove the networks without a name
+		else:
+			networks[i].pop(6) #remove the columns of information that dont matter
+			networks[i].pop(4)
+			networks[i].pop(3)
+			networks[i].pop(2)
+			print(ord(networks[i][0]))
+			networks[i] = ":".join(networks[i]) #recombine data to send
+		i -=1				#iterate 
+	
+	networks = "\n".join(networks) #recombine data to send
+	print(networks)
+	#send data
+	s.send(chr(commandnmbr) + networks)
 	return
 
 ##########################################################################################
@@ -77,7 +96,7 @@ def command_list(byte, string):
 		get_controller_version(byte, string)
 		return
 	elif byte == 2:
-		#command
+		get_wifi_networks(byte, string)
 		return
 
 #undsoweiter
