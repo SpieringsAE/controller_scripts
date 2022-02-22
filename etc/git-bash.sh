@@ -17,46 +17,46 @@ Help()
 
 Commit()
 {
-	cd /controller_scripts/
+	cd /root/controller_scripts/
 
-	cp /usr/moduline/bash/go-bluetooth-start.sh /controller_scripts/usr/moduline/bash/go-bluetooth-start.sh
+	cp /usr/moduline/bash/go-bluetooth-start.sh /root/controller_scripts/usr/moduline/bash/go-bluetooth-start.sh
 
-	cp /usr/moduline/python/make-agent.py /controller_scripts/usr/moduline/python/make-agent.py
+	cp /usr/moduline/python/make-agent.py /root/controller_scripts/usr/moduline/python/make-agent.py
 
-	cp /lib/systemd/system/go-bluetooth.service /controller_scripts/lib/systemd/system/go-bluetooth.service
+	cp /lib/systemd/system/go-bluetooth.service /root/controller_scripts/lib/systemd/system/go-bluetooth.service
 
-	cp /etc/rfcomm-server.py /controller_scripts/etc/rfcomm-server.py
+	cp /etc/rfcomm-server.py /root/controller_scripts/etc/rfcomm-server.py
 
-	cp /etc/git-bash.sh /controller_scripts/etc/git-bash.sh
+	cp /etc/git-bash.sh /root/controller_scripts/etc/git-bash.sh
 
-	git add /controller_scripts/
+	git add /root/controller_scripts/
 
 	git commit
 
 	git push
 
-	cd ../
+	cd
 }
 
 #pull changes
 
 Pull()
 {
-	cd /controller_scripts/
+	cd /root/controller_scripts/
 
 	git pull
 
-	cp /controller_scripts/usr/moduline/bash/go-bluetooth-start.sh /usr/moduline/bash/go-bluetooth-start.sh
+	cp /root/controller_scripts/usr/moduline/bash/go-bluetooth-start.sh /usr/moduline/bash/go-bluetooth-start.sh
 
-	cp /controller_scripts/usr/moduline/python/make-agent.py /usr/moduline/python/make-agent.py
+	cp /root/controller_scripts/usr/moduline/python/make-agent.py /usr/moduline/python/make-agent.py
 
-	cp /controller_scripts/lib/systemd/system/go-bluetooth.service /lib/systemd/system/go-bluetooth.service
+	cp /root/controller_scripts/lib/systemd/system/go-bluetooth.service /lib/systemd/system/go-bluetooth.service
 
-	cp /controller_scripts/etc/rfcomm-server.py /etc/rfcomm-server.py
+	cp /root/controller_scripts/etc/rfcomm-server.py /etc/rfcomm-server.py
 
-	cp /controller_scripts/etc/git-bash.sh /etc/git-bash.sh
+	cp /root/controller_scripts/etc/git-bash.sh /etc/git-bash.sh
 
-	cd ../
+	cd
 }
 
 ##################################################################################################################
