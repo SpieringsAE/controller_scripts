@@ -34,12 +34,10 @@ def get_controller_version(commandnmbr, arg):
 ###########################################################################################
 
 #get WiFi networks
-#TODO write function to get available WiFi networks
-#def get_wifi_networks()
 #picks up available networks and sends them and the connection status to the app
 
 
-def get_wifi_networks(commandnmbr, arg):
+def get_wifi_networks(commandnmbr):
 	#get the list of networks available to the controller
 	wifi_list = subprocess.run(["nmcli", "-t", "dev", "wifi"], stdout=subprocess.PIPE, text=True) #(gets the list in a layout optimal for scripting, networks seperated by \n, columns seperated by :)
 	#split up the data and filter the important information
@@ -68,22 +66,26 @@ def get_wifi_networks(commandnmbr, arg):
 
 #connect to wifi
 #TODO write function to connect to a network
-#def connect_to_wifi(name, psk, security)
-#write wpa_supplicant.conf file
-#run wpa_supplicant to connect
 #runs get_wifi_networks after to update app
 
 def connect_to_wifi(commandnmbr, arg):
-	#arg uit elkaar halen
-	#name =
-	#psk =
-	#security = 
-	#checken of het gelukt is
-	#if (niet gelukt)
-		#s.send(reden waarom het niet gelukt is, verkeerd wachtwoord bijvoorbeeld)
-	#else
-		#get_wifi_networks(commandnmbr)
-	s.send(chr(commandnmbr))
+	#seperate arg
+	message_list = arg.split(":")
+	result = subprocess.run(["nmcli", "device", "wifi", "connect", message_list[0], "password", message_list[1]], stdout=subprocess.PIPE, text=True)
+	resultstring = result.stdout
+	#Error: No network with SSID 'dfg' found.
+	#Error: Connection activation failed: (7) Secrets were required, but not provided.
+	#Device 'wlan0' successfully activated with 'uuid'
+	if (resultstring.find("successfully")!=-1):
+		connection_result = 2
+	elif (resultstring.find("Secrets")!=-1):
+		connection_result = 1
+	elif (resultstring.find("SSID")!=-1):
+		connection_result = 0
+	else:
+		connection_result = 3
+	s.send(chr(commandnmbr) + chr(connection_result))
+	get_wifi_networks(2)
 
 ##########################################################################################
 #command_list
@@ -96,7 +98,10 @@ def command_list(byte, string):
 		get_controller_version(byte, string)
 		return
 	elif byte == 2:
-		get_wifi_networks(byte, string)
+		get_wifi_networks(byte)
+		return
+	elif byte == 3:
+		connect_to_wifi(byte, string)
 		return
 
 #undsoweiter
