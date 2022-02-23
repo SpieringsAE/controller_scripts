@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 from ftplib import error_perm
+from re import sub
 from bluedot.btcomm import BluetoothServer
 from signal import pause
 import subprocess
@@ -45,19 +46,22 @@ def get_wifi_networks(commandnmbr):
 	i=len(networks)-1 #set up a variable to loop through the list from the back
 	for n in range(len(networks)):
 		networks[i] = networks[i].split(":") #split every network up into its components at the : characters
-		if networks[i][1]=="": #if this is true the current index contains a network with no name
+		#print(networks[i])
+		if len(networks[i]) < 2:
+			networks.pop(i)
+		elif networks[i][1]=="": #if this is true the current index contains a network with no name
 			networks.pop(i) #remove the networks without a name
 		else:
 			networks[i].pop(6) #remove the columns of information that dont matter
 			networks[i].pop(4)
 			networks[i].pop(3)
 			networks[i].pop(2)
-			print(ord(networks[i][0]))
+			#print(ord(networks[i][0]))
 			networks[i] = ":".join(networks[i]) #recombine data to send
 		i -=1				#iterate 
 	
 	networks = "\n".join(networks) #recombine data to send
-	print(networks)
+	#print(networks)
 	#send data
 	s.send(chr(commandnmbr) + networks)
 	return
@@ -65,7 +69,6 @@ def get_wifi_networks(commandnmbr):
 ##########################################################################################
 
 #connect to wifi
-#TODO write function to connect to a network
 #runs get_wifi_networks after to update app
 
 def connect_to_wifi(commandnmbr, arg):
@@ -88,6 +91,24 @@ def connect_to_wifi(commandnmbr, arg):
 	get_wifi_networks(2)
 
 ##########################################################################################
+
+#disconnect from wifi network
+#runs get_wifi_networks after to update the app
+
+def disconnect_from_wifi(commandnmbr, arg):
+	result = subprocess.run(["nmcli", "connection", "delete", "id", arg], stdout=subprocess.PIPE, text=True)
+	resultstring = result.stdout
+	#Connection 'name' (uuid) succesfully deleted.
+	#Error: unknown connection 'name'.\n
+	#Eroor: cannot delete unknown connection(s): id 'name'
+	if (resultstring.find("successfully")!=-1):
+		disconnection_result = 1
+	else:
+		disconnection_result = 0
+	s.send(chr(commandnmbr) + chr(disconnection_result))
+	get_wifi_networks(2)
+
+##########################################################################################
 #command_list
 
 def command_list(byte, string):
@@ -102,6 +123,9 @@ def command_list(byte, string):
 		return
 	elif byte == 3:
 		connect_to_wifi(byte, string)
+		return
+	elif byte == 4:
+		disconnect_from_wifi(byte, string)
 		return
 
 #undsoweiter
