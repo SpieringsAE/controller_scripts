@@ -1,13 +1,41 @@
 #!/usr/bin/python3
+from audioop import add
 from ftplib import error_perm
 from re import sub
+from socketserver import ThreadingUnixStreamServer
 from bluedot.btcomm import BluetoothServer
 from signal import pause
+from os.path import exists
+from pathlib import Path
 import subprocess
 import time
 
+#global trust_device
+#trust_device = 0
 ##########################################################################################
 #commands to be executed by controller
+##########################################################################################
+
+#verify device
+
+def verify_device(commandnmbr, arg):
+	global trust_device
+	trusted_devices = open("/etc/bluetooth/trusted_devices.txt", "r")
+	passkey = trusted_devices.readline()
+	trusted_devices.close()
+	if (passkey[:-1] == arg):
+		trust_device = 1
+		add_trusted_device = open("/etc/bluetooth/trusted_devices.txt", "a")
+		add_trusted_device.write(s.client_address + "\n")
+		add_trusted_device.close()
+		s.send(chr(commandnmbr)+chr(0))
+	else:
+		request_verification(chr(2))
+		
+
+
+
+
 ##########################################################################################
 
 #update controller
@@ -28,7 +56,7 @@ def update_controller(commandnmbr, arg):
 
 def get_controller_version(commandnmbr, arg):
 	print(arg)
-	s.send(chr(commandnmbr) + "hw" + open("/sys/firmware/devicetree/base/hardware", "r").read() + "sw") #add software version
+	s.send(chr(commandnmbr) + "hw=" + open("/sys/firmware/devicetree/base/hardware", "r").read() + "\nsw=" + open("version.txt", "r").read(6))
 
 #TODO triggers update button on the app in the future?
 
@@ -110,21 +138,25 @@ def disconnect_from_wifi(commandnmbr, arg):
 
 ##########################################################################################
 #command_list
+##########################################################################################
 
 def command_list(byte, string):
 	if byte == 0:
-		update_controller(byte, string)
+		verify_device(byte, string)
 		return
 	elif byte == 1:
-		get_controller_version(byte, string)
+		update_controller(byte, string)
 		return
 	elif byte == 2:
-		get_wifi_networks(byte)
+		get_controller_version(byte, string)
 		return
 	elif byte == 3:
-		connect_to_wifi(byte, string)
+		get_wifi_networks(byte)
 		return
 	elif byte == 4:
+		connect_to_wifi(byte, string)
+		return
+	elif byte == 5:
 		disconnect_from_wifi(byte, string)
 		return
 
@@ -133,11 +165,43 @@ def command_list(byte, string):
 
 ##########################################################################################
 #bluetooth rfcomm server setup
+##########################################################################################
+
+def request_verification(char):
+	s.send(chr(0)+char)
 
 def data_received(data):
+	global trust_device
 	eerste_byte = ord(data[0])
 	data = data.replace(data[0], '',1)
-	command_list(eerste_byte, data)
+	if (trust_device == 1 or eerste_byte == 0):
+		command_list(eerste_byte, data)
+	else:
+		request_verification(chr(1))
 
-s = BluetoothServer(data_received)
+def when_client_connects():
+	global trust_device
+	trust_device = 0
+	connectedClient = s.client_address
+	trusted_devices = open("/etc/bluetooth/trusted_devices.txt", "r")
+	for lines in trusted_devices:
+		if (lines[:-1]==connectedClient):
+			trust_device = 1
+			trusted_devices.close()
+			return
+	trusted_devices.close()
+	request_verification(chr(1))
+
+def when_client_disconnects():
+	print("connection lost")
+
+# if (not exists("/etc/bluetooth/trusted_devices.txt")):
+# 	print("does not exist")
+# 	trusted_devices = open("/etc/bluetooth/trusted_devices.txt", "x")
+# 	trusted_devices.close()
+# else:
+# 	print("exists")
+
+
+s = BluetoothServer(data_received, True, "hci0", 1, "utf-8", False, when_client_connects, when_client_disconnects)
 pause()
