@@ -27,7 +27,7 @@ Commit()
 
 	cp /etc/rfcomm-server.py /root/controller_scripts/etc/rfcomm-server.py
 
-	cp /etc/rfcommServerCommands.py /root/controller_scripts/etc/rfcommServerCommands.py
+	cp /etc/rfcommServerConstants.py /root/controller_scripts/etc/rfcommServerConstants.py
 
 	cp /etc/git-bash.sh /root/controller_scripts/etc/git-bash.sh
 
@@ -56,7 +56,7 @@ Pull()
 
 	cp /root/controller_scripts/etc/rfcomm-server.py /etc/rfcomm-server.py
 
-	cp /root/controller_scripts/etc/rfcommServerCommands.py /etc/rfcommServerCommands.py
+	cp /root/controller_scripts/etc/rfcommServerConstants.py /etc/rfcommServerConstants.py
 
 	cp /root/controller_scripts/etc/git-bash.sh /etc/git-bash.sh
 
