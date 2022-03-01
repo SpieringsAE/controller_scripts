@@ -27,6 +27,8 @@ Commit()
 
 	cp /etc/rfcomm-server.py /root/controller_scripts/etc/rfcomm-server.py
 
+	cp /etc/rfcommServerCommands.py /root/controller_scripts/etc/rfcommServerCommands.py
+
 	cp /etc/git-bash.sh /root/controller_scripts/etc/git-bash.sh
 
 	git add /root/controller_scripts/
@@ -53,6 +55,8 @@ Pull()
 	cp /root/controller_scripts/lib/systemd/system/go-bluetooth.service /lib/systemd/system/go-bluetooth.service
 
 	cp /root/controller_scripts/etc/rfcomm-server.py /etc/rfcomm-server.py
+
+	cp /root/controller_scripts/etc/rfcommServerCommands.py /etc/rfcommServerCommands.py
 
 	cp /root/controller_scripts/etc/git-bash.sh /etc/git-bash.sh
 

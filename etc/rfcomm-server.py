@@ -9,9 +9,8 @@ from os.path import exists
 from pathlib import Path
 import subprocess
 import time
+import rfcommServerConstants as commands
 
-#global trust_device
-#trust_device = 0
 ##########################################################################################
 #commands to be executed by controller
 ##########################################################################################
@@ -28,7 +27,7 @@ def verify_device(commandnmbr, arg):
 		add_trusted_device = open("/etc/bluetooth/trusted_devices.txt", "a")
 		add_trusted_device.write(s.client_address + "\n")
 		add_trusted_device.close()
-		s.send(chr(commandnmbr)+chr(0))
+		request_verification(chr(0))
 	else:
 		request_verification(chr(2))
 		
@@ -41,7 +40,6 @@ def verify_device(commandnmbr, arg):
 #update controller
 
 def update_controller(commandnmbr, arg):
-	print(arg)
 	s.send(chr(commandnmbr) + "updating...")
 	#git clone etc
 	time.sleep(0.5)    #sleep is apparently important, it does something very weird if there is no time inbetween s.send()s
@@ -51,11 +49,9 @@ def update_controller(commandnmbr, arg):
 
 ###########################################################################################
 
-#get the version of the controller (potentially match this with updates to the app to determine whether the controller could be updated)
-#runs when phone and controller are connected
+#get controller version
 
-def get_controller_version(commandnmbr, arg):
-	print(arg)
+def get_controller_version(commandnmbr):
 	s.send(chr(commandnmbr) + "hw=" + open("/sys/firmware/devicetree/base/hardware", "r").read() + "\nsw=" + open("version.txt", "r").read(6))
 
 #TODO triggers update button on the app in the future?
@@ -116,7 +112,7 @@ def connect_to_wifi(commandnmbr, arg):
 	else:
 		connection_result = 3
 	s.send(chr(commandnmbr) + chr(connection_result))
-	get_wifi_networks(2)
+	get_wifi_networks(3)
 
 ##########################################################################################
 
@@ -128,35 +124,35 @@ def disconnect_from_wifi(commandnmbr, arg):
 	resultstring = result.stdout
 	#Connection 'name' (uuid) succesfully deleted.
 	#Error: unknown connection 'name'.\n
-	#Eroor: cannot delete unknown connection(s): id 'name'
+	#Error: cannot delete unknown connection(s): id 'name'
 	if (resultstring.find("successfully")!=-1):
 		disconnection_result = 1
 	else:
 		disconnection_result = 0
 	s.send(chr(commandnmbr) + chr(disconnection_result))
-	get_wifi_networks(2)
+	get_wifi_networks(3)
 
 ##########################################################################################
 #command_list
 ##########################################################################################
 
 def command_list(byte, string):
-	if byte == 0:
+	if byte == commands.VERIFY_DEVICE:
 		verify_device(byte, string)
 		return
-	elif byte == 1:
+	elif byte == commands.UPDATE_CONTROLLER:
 		update_controller(byte, string)
 		return
-	elif byte == 2:
-		get_controller_version(byte, string)
+	elif byte == commands.GET_CONTROLLER_VERSION:
+		get_controller_version(byte)
 		return
-	elif byte == 3:
+	elif byte == commands.GET_WIFI_NETWORKS:
 		get_wifi_networks(byte)
 		return
-	elif byte == 4:
+	elif byte == commands.CONNECT_TO_WIFI:
 		connect_to_wifi(byte, string)
 		return
-	elif byte == 5:
+	elif byte == commands.DISCONNECT_FROM_WIFI:
 		disconnect_from_wifi(byte, string)
 		return
 
@@ -168,40 +164,33 @@ def command_list(byte, string):
 ##########################################################################################
 
 def request_verification(char):
-	s.send(chr(0)+char)
+	s.send(chr(commands.VERIFY_DEVICE)+char)
 
 def data_received(data):
 	global trust_device
-	eerste_byte = ord(data[0])
+	first_byte = ord(data[0])
 	data = data.replace(data[0], '',1)
-	if (trust_device == 1 or eerste_byte == 0):
-		command_list(eerste_byte, data)
+	if (trust_device == 1 or first_byte == 0):
+		command_list(first_byte, data)
 	else:
 		request_verification(chr(1))
 
 def when_client_connects():
 	global trust_device
 	trust_device = 0
-	connectedClient = s.client_address
+	connected_client = s.client_address
 	trusted_devices = open("/etc/bluetooth/trusted_devices.txt", "r")
-	for lines in trusted_devices:
-		if (lines[:-1]==connectedClient):
-			trust_device = 1
-			trusted_devices.close()
-			return
+	if (trusted_devices.read().find(connected_client) != -1):
+		trust_device = 1
+		trusted_devices.close()
+		get_controller_version(2)
+		get_wifi_networks(3)
+		return
 	trusted_devices.close()
 	request_verification(chr(1))
 
 def when_client_disconnects():
 	print("connection lost")
-
-# if (not exists("/etc/bluetooth/trusted_devices.txt")):
-# 	print("does not exist")
-# 	trusted_devices = open("/etc/bluetooth/trusted_devices.txt", "x")
-# 	trusted_devices.close()
-# else:
-# 	print("exists")
-
 
 s = BluetoothServer(data_received, True, "hci0", 1, "utf-8", False, when_client_connects, when_client_disconnects)
 pause()
