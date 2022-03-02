@@ -81,11 +81,13 @@ def get_wifi_networks(commandnmbr):
 			networks[i].pop(3)
 			networks[i].pop(2)
 			#print(ord(networks[i][0]))
+			if networks[i][3] == "":
+				networks[i][3] = "No Security"
 			networks[i] = ":".join(networks[i]) #recombine data to send
 		i -=1				#iterate 
 	
 	networks = "\n".join(networks) #recombine data to send
-	#print(networks)
+	print(networks)
 	#send data
 	s.send(chr(commandnmbr) + networks)
 	return
