@@ -1,9 +1,11 @@
 #!/usr/bin/python3
 from audioop import add
 from ftplib import error_perm
-from re import sub
+from re import I, sub
 from socketserver import ThreadingUnixStreamServer
+from wsgiref.simple_server import software_version
 from bluedot.btcomm import BluetoothServer
+import requests
 from signal import pause
 from os.path import exists
 from pathlib import Path
@@ -27,23 +29,34 @@ def verify_device(commandnmbr, arg):
 		add_trusted_device = open("/etc/bluetooth/trusted_devices.txt", "a")
 		add_trusted_device.write(s.client_address + "\n")
 		add_trusted_device.close()
-		request_verification(chr(0))
+		request_verification(chr(commands.DEVICE_VERIFICATION_SUCCES))
+		time.sleep(0.5)
+		get_controller_version
 	else:
-		request_verification(chr(2))
-		
-
-
-
+		request_verification(chr(commands.DEVICE_VERIFICATION_INCORRECT_PASSKEY))
 
 ##########################################################################################
 
 #update controller
 
 def update_controller(commandnmbr, arg):
-	s.send(chr(commandnmbr) + "updating...")
-	#git clone etc
-	time.sleep(0.5)    #sleep is apparently important, it does something very weird if there is no time inbetween s.send()s
-	s.send(chr(commandnmbr) + "updated! rebooting now")
+	timeout =1
+	try:
+		requests.head("https://www.github.com/", timeout=timeout)
+		send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE))
+
+	except requests.ConnectionError:
+		send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE))
+	# if arg == 0:
+	# 	#files have been sent by the phone so are already available on the controller
+	# 	subprocess.run(["unzip", "/tmp/temporary.zip"])
+	# 	subprocess.run(["rm", "/tmp/temporary.zip"])
+	# 	#subprocess.run([""])
+	# else:
+	# 	print("get files from git")
+	# #git clone etc
+	# time.sleep(0.5)    #sleep is apparently important, it does something very weird if there is no time inbetween s.send()s
+	# send(chr(commandnmbr) + "updated! rebooting now")
 
 #TODO but not in scope: update controller over bluetooth without the controller being connected to the internet
 
@@ -52,10 +65,60 @@ def update_controller(commandnmbr, arg):
 #get controller version
 
 def get_controller_version(commandnmbr):
-	s.send(chr(commandnmbr) + "hw=" + open("/sys/firmware/devicetree/base/hardware", "r").read() + "\nsw=" + open("version.txt", "r").read(6))
+	hardware_version = open("/sys/firmware/devicetree/base/hardware", "r").read()
+	software_version = open("version.txt", "r").read(6)
+	print("Hardware version: "+ hardware_version)
+	print("Software version: "+ software_version)
+	send(chr(commandnmbr) + hardware_version + "\n" + software_version)
 
 #TODO triggers update button on the app in the future?
 
+###########################################################################################
+
+#set transfer mode
+#switches between command mode and zip transfer mode.
+
+def set_transfer_mode(commandnmbr, arg):
+	global transfer_mode
+	global first_write
+	global file_size
+	global i
+	global progress
+	progress = 0
+	i = 0
+	first_write = 1
+	transfer_mode = 1
+	file_size = int(arg)
+
+	print("setting transfer mode")
+	send(chr(commandnmbr)+chr(commands.FILE_TRANSFER_ENABLED))
+
+def receive_zip(data):
+	global transfer_mode
+	global first_write
+	global i
+	global progress
+	progress_check = progress
+	i += 1
+	progress = int(((i*990)/file_size)*100)
+	if progress > progress_check: #only send progress when it changes to clear up bluetooth bandwidth
+		send(chr(commands.SET_TRANSFER_MODE) + chr(commands.FILE_TRANSFER_PROGRESS) + str(progress))
+		#print(progress)
+	if first_write == 1:
+		file_type = data[1:4].decode("utf-8")
+		with open("/tmp/temporary." + file_type, "wb") as file:
+			file.write(data)
+		first_write =0
+		print("receiving file")
+	else:
+		with open("/tmp/temporary."+ file_type, "ab") as file:
+			file.write(data)
+	if file_size/i <= 990:
+		transfer_mode = "command"
+		send(chr(commands.SET_TRANSFER_MODE)+chr(commands.FILE_TRANSFER_COMPLETE))
+		print("commands enabled")
+
+#send(filetransfer + filetransfer state + (progress))
 ###########################################################################################
 
 #get WiFi networks
@@ -87,11 +150,12 @@ def get_wifi_networks(commandnmbr):
 		i -=1				#iterate 
 	
 	networks = "\n".join(networks) #recombine data to send
-	print(networks)
+	#print(networks)
 	#send data
-	s.send(chr(commandnmbr) + networks)
+	send(chr(commandnmbr) + networks)
 	return
 
+#send(getwifinetworks + net list)
 ##########################################################################################
 
 #connect to wifi
@@ -106,16 +170,17 @@ def connect_to_wifi(commandnmbr, arg):
 	#Error: Connection activation failed: (7) Secrets were required, but not provided.
 	#Device 'wlan0' successfully activated with 'uuid'
 	if (resultstring.find("successfully")!=-1):
-		connection_result = 2
+		connection_result = commands.WIFI_CONNECT_SUCCES
 	elif (resultstring.find("Secrets")!=-1):
-		connection_result = 1
+		connection_result = commands.WIFI_CONNECT_FAILED_INC_PW
 	elif (resultstring.find("SSID")!=-1):
-		connection_result = 0
+		connection_result = commands.WIFI_CONNECT_FAILED_INC_SSID
 	else:
-		connection_result = 3
-	s.send(chr(commandnmbr) + chr(connection_result))
-	get_wifi_networks(3)
+		connection_result = commands.WIFI_CONNECT_FAILED_UNKNOWN
+	send(chr(commandnmbr) + chr(connection_result))
+	get_wifi_networks(commands.GET_WIFI_NETWORKS)
 
+#send(connecttowifi + result int)
 ##########################################################################################
 
 #disconnect from wifi network
@@ -128,17 +193,19 @@ def disconnect_from_wifi(commandnmbr, arg):
 	#Error: unknown connection 'name'.\n
 	#Error: cannot delete unknown connection(s): id 'name'
 	if (resultstring.find("successfully")!=-1):
-		disconnection_result = 1
+		disconnection_result = commands.WIFI_DISCONNECT_SUCCES
 	else:
-		disconnection_result = 0
-	s.send(chr(commandnmbr) + chr(disconnection_result))
-	get_wifi_networks(3)
+		disconnection_result = commands.WIFI_DISCONNECT_FAILED
+	send(chr(commandnmbr) + chr(disconnection_result))
+	get_wifi_networks(commands.GET_WIFI_NETWORKS)
 
+#send(disconnectfromwifi + result int)
 ##########################################################################################
 #command_list
 ##########################################################################################
 
 def command_list(byte, string):
+	string = string.decode("utf-8")
 	if byte == commands.VERIFY_DEVICE:
 		verify_device(byte, string)
 		return
@@ -147,6 +214,9 @@ def command_list(byte, string):
 		return
 	elif byte == commands.GET_CONTROLLER_VERSION:
 		get_controller_version(byte)
+		return
+	elif byte == commands.SET_TRANSFER_MODE:
+		set_transfer_mode(byte, string)
 		return
 	elif byte == commands.GET_WIFI_NETWORKS:
 		get_wifi_networks(byte)
@@ -157,6 +227,8 @@ def command_list(byte, string):
 	elif byte == commands.DISCONNECT_FROM_WIFI:
 		disconnect_from_wifi(byte, string)
 		return
+	else:
+		send(chr(commands.UNKNOWN_COMMAND) + "unknown command")
 
 #undsoweiter
 
@@ -166,27 +238,39 @@ def command_list(byte, string):
 ##########################################################################################
 
 def request_verification(char):
-	s.send(chr(commands.VERIFY_DEVICE)+char)
+	send(chr(commands.VERIFY_DEVICE)+char)
+
+def send(string):
+	s.send(bytes(string, 'utf-8'))
 
 def data_received(data):
+	#print(data)
 	global trust_device
-	first_byte = ord(data[0])
-	data = data.replace(data[0], '',1)
+	global transfer_mode
+	first_byte = data[0]
 	if (trust_device == 1 or first_byte == 0):
-		command_list(first_byte, data)
+		if transfer_mode == "command":
+			#data = data.replace(data[0], '',1)
+			data = data[1:]
+			command_list(first_byte, data)
+		else:
+			receive_zip(data)
 	else:
 		request_verification(chr(1))
 
 def when_client_connects():
 	global trust_device
+	global transfer_mode
+	transfer_mode = "command"
 	trust_device = 0
 	connected_client = s.client_address
+	print("connected to: " + connected_client)
 	trusted_devices = open("/etc/bluetooth/trusted_devices.txt", "r")
 	if (trusted_devices.read().find(connected_client) != -1):
 		trust_device = 1
 		trusted_devices.close()
 		get_controller_version(2)
-		get_wifi_networks(3)
+		#get_wifi_networks(3)
 		return
 	trusted_devices.close()
 	request_verification(chr(1))
@@ -194,5 +278,5 @@ def when_client_connects():
 def when_client_disconnects():
 	print("connection lost")
 
-s = BluetoothServer(data_received, True, "hci0", 1, "utf-8", False, when_client_connects, when_client_disconnects)
+s = BluetoothServer(data_received, True, "hci0", 1, None, False, when_client_connects, when_client_disconnects)
 pause()
