@@ -346,7 +346,7 @@ def when_client_disconnects():
 #defines a variable which can be interacted with for bluetooth functions
 #sets up callback functions and how the received/sent data is processed
 s = BluetoothServer(data_received, True, "hci0", 1, None, False, when_client_connects, when_client_disconnects)
-# g = Github("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")
+# g = Github("")
 # r = g.get_repo("Rick-GO/GOcontroll-Moduline")
 # print(r)
 pause()
