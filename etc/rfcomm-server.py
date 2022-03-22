@@ -10,6 +10,7 @@ import subprocess
 import time
 import rfcommServerConstants as commands
 import hashlib
+# from github import Github
 
 def md5(fname):
 	hash_md5 = hashlib.md5()
@@ -64,23 +65,12 @@ def update_controller(commandnmbr, arg):
 				print("file was aproved")
 			else:
 				print("file was corrupted")
-			return
-		return
+		elif (level1==commands.UPDATE_STORED_SHA):
+			sha = arg[2:]
+			# with open("/etc/module-firmware-update/lastupdatecheck.txt", "w") as file:
+			# 	file.write(sha)
+			
 
-
-	#set the timeout time for the connection check
-	timeout =1
-	#attempt to read the head of github.com to see if there is a connection available
-	try:
-		requests.head("https://www.github.com/", timeout=timeout)
-		#tell the app the controller has internet so it can download the update itself
-		send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE))
-
-		#TODO get the files from github to update
-
-	except requests.ConnectionError:
-		#tell the app the controller is not connected to the internet and requires an update over bluetooth
-		send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE))
 
 #TODO but not in scope: update controller over bluetooth without the controller being connected to the internet
 
@@ -90,12 +80,31 @@ def update_controller(commandnmbr, arg):
 
 def get_controller_version(commandnmbr):
 	#open up the files that contain the versions
-	with open("/sys/firmware/devicetree/base/hardware", "r") as file:
-		hardware_version = file.read()
-	with open("version.txt", "r") as file:
-		software_version = file.read(6)
+	# with open("/sys/firmware/devicetree/base/hardware", "r") as file:
+	# 	hardware_version = file.read()
+	# with open("version.txt", "r") as file:
+	# 	software_version = file.read(6)
 	#return the versions to the app
-	send(chr(commandnmbr) + hardware_version + "\n" + software_version)
+	#set the timeout time for the connection check
+	timeout =1
+	#attempt to read the head of github.com to see if there is a connection available
+	try:
+		requests.head("https://www.github.com/", timeout=timeout)
+		#tell the app the controller has internet so it can download the update itself
+		#TODO add update check logic
+		with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
+			sha = file.read()
+		send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
+		#send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
+
+		#TODO get the files from github to update
+
+	except requests.ConnectionError:
+		#tell the app the controller is not connected to the internet and requires an update over bluetooth
+		#TODO add the latest update check date or sha
+		with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
+			sha = file.read()
+		send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
 
 #TODO get module firmware versions
 
@@ -137,19 +146,19 @@ def receive_zip(data):
 		send(chr(commands.SET_TRANSFER_MODE) + chr(commands.FILE_TRANSFER_PROGRESS) + chr(progress))
 	#for the first packet of information the file needs to be created instead of appended
 	if first_write == 1:
-		with open("/tmp/temporary." + "srec", "wb") as file:
+		with open("/tmp/temporary." + "zip", "wb") as file:
 			file.write(data)
 		first_write =0
 		print("receiving file")
 	else:
-		with open("/tmp/temporary." + "srec", "ab") as file:
+		with open("/tmp/temporary." + "zip", "ab") as file:
 			file.write(data)
 	#when te last packet is received
 	if file_size/i <= 990:
 		#set the transfer mode back to command
 		transfer_mode = "command"
 		#inform the app that the file has been transferred and that commands are open again
-		checksum = md5("/tmp/temporary.srec")
+		checksum = md5("/tmp/temporary.zip")
 		send(chr(commands.SET_TRANSFER_MODE)+chr(commands.FILE_TRANSFER_COMPLETE)+checksum)
 		
 		print("commands enabled")
@@ -337,4 +346,7 @@ def when_client_disconnects():
 #defines a variable which can be interacted with for bluetooth functions
 #sets up callback functions and how the received/sent data is processed
 s = BluetoothServer(data_received, True, "hci0", 1, None, False, when_client_connects, when_client_disconnects)
+# g = Github("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")
+# r = g.get_repo("Rick-GO/GOcontroll-Moduline")
+# print(r)
 pause()
