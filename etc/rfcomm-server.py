@@ -10,6 +10,7 @@ import subprocess
 import time
 import rfcommServerConstants as commands
 import hashlib
+from smbus2 import SMBus
 # from github import Github
 
 def md5(fname):
@@ -56,17 +57,17 @@ def request_verification(char):
 #update controller
 
 def update_controller(commandnmbr, arg):
-
 	if (arg != ""):
-		level1 = int(arg[1])
+		level1 = ord(arg[0])
 		if (level1==commands.UPDATE_FILE_TRANSFER_CHECK):
-			level2 = int(arg[2])
+			level2 = ord(arg[1])
 			if (level2 == commands.UPDATE_FILE_APROVED):
 				print("file was aproved")
+				send(chr(commandnmbr) + chr(commands.UPDATE_STORED_SHA))
 			else:
 				print("file was corrupted")
 		elif (level1==commands.UPDATE_STORED_SHA):
-			sha = arg[2:]
+			sha = arg[1:]
 			# with open("/etc/module-firmware-update/lastupdatecheck.txt", "w") as file:
 			# 	file.write(sha)
 			
@@ -78,33 +79,40 @@ def update_controller(commandnmbr, arg):
 
 #get controller version
 
-def get_controller_version(commandnmbr):
-	#open up the files that contain the versions
-	# with open("/sys/firmware/devicetree/base/hardware", "r") as file:
-	# 	hardware_version = file.read()
-	# with open("version.txt", "r") as file:
-	# 	software_version = file.read(6)
-	#return the versions to the app
-	#set the timeout time for the connection check
-	timeout =1
-	#attempt to read the head of github.com to see if there is a connection available
-	try:
-		requests.head("https://www.github.com/", timeout=timeout)
-		#tell the app the controller has internet so it can download the update itself
-		#TODO add update check logic
-		with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
-			sha = file.read()
-		send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
-		#send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
+def get_controller_version(commandnmbr, arg):
+	level1 = ord(arg[0])
+	
+	if (level1 == commands.GET_SHA):
+		#set the timeout time for the connection check
+		timeout =1
+		#attempt to read the head of github.com to see if there is a connection available
+		try:
+			requests.head("https://www.github.com/", timeout=timeout)
+			#tell the app the controller has internet so it can download the update itself
+			#TODO add update check logic
+			with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
+				sha = file.read()
+			send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
+			#send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
 
-		#TODO get the files from github to update
+			#TODO get the files from github to update
 
-	except requests.ConnectionError:
-		#tell the app the controller is not connected to the internet and requires an update over bluetooth
-		#TODO add the latest update check date or sha
-		with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
-			sha = file.read()
-		send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
+		except requests.ConnectionError:
+			#tell the app the controller is not connected to the internet and requires an update over bluetooth
+			#TODO add the latest update check date or sha
+			with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
+				sha = file.read()
+			send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
+	elif (level1 == commands.GET_SETTINGS_INFORMATION):
+		#open up the files that contain the versions
+		with open("/sys/firmware/devicetree/base/hardware", "r") as file:
+			hardware_version = file.read()
+		with open("version.txt", "r") as file:
+			software_version = file.read(6)
+		with open("/etc/machine-info", "r") as file:
+			controller_name = file.read().split("=")
+		#return the versions to the app
+		send(chr(commandnmbr) + chr(commands.GET_SETTINGS_INFORMATION) + hardware_version + ":" + software_version + ":" + controller_name[1])
 
 #TODO get module firmware versions
 
@@ -256,6 +264,30 @@ def disconnect_from_wifi(commandnmbr, arg):
 
 #send(disconnectfromwifi + result int)
 ##########################################################################################
+
+#update the general controller settings
+
+def update_controller_settings(commandnmbr, arg):
+	if "GOcontroll" in arg:
+		write_device_name(arg)
+	else:
+		arg = "GOcontroll-" + arg
+		write_device_name(arg)
+
+	print(arg)
+
+def write_device_name(name):
+	with open("/etc/machine-info", "w") as file:
+		file.write("PRETTY_HOSTNAME="+name)
+
+##########################################################################################
+
+#reboot the controller
+
+def reboot_controller():
+	subprocess.run(["reboot"])
+
+##########################################################################################
 #command_list
 ##########################################################################################
 
@@ -270,7 +302,7 @@ def command_list(byte, string):
 		update_controller(byte, string)
 		return
 	elif byte == commands.GET_CONTROLLER_VERSION:
-		get_controller_version(byte)
+		get_controller_version(byte, string)
 		return
 	elif byte == commands.SET_TRANSFER_MODE:
 		set_transfer_mode(byte, string)
@@ -283,6 +315,12 @@ def command_list(byte, string):
 		return
 	elif byte == commands.DISCONNECT_FROM_WIFI:
 		disconnect_from_wifi(byte, string)
+		return
+	elif byte == commands.UPDATE_CONTROLLER_SETTINGS:
+		update_controller_settings(byte,string)
+		return
+	elif byte == commands.REBOOT_CONTROLLER:
+		reboot_controller()
 		return
 	else:
 		send(chr(commands.UNKNOWN_COMMAND) + "unknown command")
@@ -305,10 +343,12 @@ def data_received(data):
 	global transfer_mode
 	#get the command byte
 	first_byte = data[0]
+	
 	#if the device is trusted or the received command is part of the verification routine
 	if (trust_device or first_byte == 0):
 		#if the server is set to receive commands or transfer a file
 		if transfer_mode == "command":
+			print(data)
 			#extract the argument from the message
 			data = data[1:]
 			#run through the commands list
@@ -321,6 +361,12 @@ def data_received(data):
 
 #function that gets called when a device connects to the server
 def when_client_connects():
+	with SMBus(2) as bus:
+		bus.write_i2c_block_data(address,0,[23,255])
+		time.sleep(0.1)
+		bus.write_i2c_block_data(address,0,[0,64])
+		time.sleep(0.1)
+		bus.write_i2c_block_data(address,0,[13,127])
 	#set device to not be trusted and transfer mode to command mode everytime
 	global trust_device
 	global transfer_mode
@@ -333,7 +379,7 @@ def when_client_connects():
 	with open("/etc/bluetooth/trusted_devices.txt", "r") as trusted_devices:
 		if (trusted_devices.read().find(connected_client) != -1):
 			trust_device = True
-			get_controller_version(commands.GET_CONTROLLER_VERSION)
+			get_controller_version(commands.GET_CONTROLLER_VERSION, chr(commands.GET_SHA))
 			return
 		#if not request verification
 		else:
@@ -341,11 +387,18 @@ def when_client_connects():
 
 #function that gets called when a device disconnects from the server
 def when_client_disconnects():
+	with SMBus(2) as bus:
+		# bus.write_i2c_block_data(address,0,[23,255])
+		# time.sleep(0.1)
+		# bus.write_i2c_block_data(address,0,[0,64])
+		# time.sleep(0.1)
+		bus.write_i2c_block_data(address,0,[13,0])
 	print("connection lost")
 
 #defines a variable which can be interacted with for bluetooth functions
 #sets up callback functions and how the received/sent data is processed
 s = BluetoothServer(data_received, True, "hci0", 1, None, False, when_client_connects, when_client_disconnects)
+address = 20
 # g = Github("")
 # r = g.get_repo("Rick-GO/GOcontroll-Moduline")
 # print(r)
