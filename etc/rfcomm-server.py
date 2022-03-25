@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+from audioop import add
 from ftplib import error_perm
 from socketserver import ThreadingUnixStreamServer
 from bluedot.btcomm import BluetoothServer
@@ -11,6 +12,7 @@ import time
 import rfcommServerConstants as commands
 import hashlib
 from smbus2 import SMBus
+from github import Github
 # from github import Github
 
 def md5(fname):
@@ -70,16 +72,14 @@ def update_controller(commandnmbr, arg):
 			sha = arg[1:]
 			# with open("/etc/module-firmware-update/lastupdatecheck.txt", "w") as file:
 			# 	file.write(sha)
-			
-
-
-#TODO but not in scope: update controller over bluetooth without the controller being connected to the internet
 
 ###########################################################################################
 
 #get controller version
 
 def get_controller_version(commandnmbr, arg):
+	global file_urls
+	file_urls = []
 	level1 = ord(arg[0])
 	
 	if (level1 == commands.GET_SHA):
@@ -89,11 +89,31 @@ def get_controller_version(commandnmbr, arg):
 		try:
 			requests.head("https://www.github.com/", timeout=timeout)
 			#tell the app the controller has internet so it can download the update itself
-			#TODO add update check logic
 			with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
 				sha = file.read()
-			send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
-			#send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
+			with open("/etc/accesstoken.txt", "r") as file:
+				token = file.read()
+			g = Github(token)
+			r = g.get_repo("Rick-GO/GOcontroll-Moduline")
+			cs = r.get_commits(since=r.get_commit(sha).commit.author.date,path="/usr/module-firmware")
+			first_run=0
+			global last_commit_sha
+			for c in cs:
+				print("commit found: ")
+				print(c.commit.author.date)
+				if first_run==0:
+					last_commit_sha = c.sha
+					first_run += 1
+				if sha == c.sha:
+					break
+				for file in c.files:
+					if "srec" in file.filename:
+						file_urls.append(file.raw_url)
+			if len(file_urls) > 0:
+				print(file_urls)
+				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
+			else:
+				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE))
 
 			#TODO get the files from github to update
 
@@ -113,8 +133,6 @@ def get_controller_version(commandnmbr, arg):
 			controller_name = file.read().split("=")
 		#return the versions to the app
 		send(chr(commandnmbr) + chr(commands.GET_SETTINGS_INFORMATION) + hardware_version + ":" + software_version + ":" + controller_name[1])
-
-#TODO get module firmware versions
 
 ###########################################################################################
 
@@ -362,11 +380,9 @@ def data_received(data):
 #function that gets called when a device connects to the server
 def when_client_connects():
 	with SMBus(2) as bus:
-		bus.write_i2c_block_data(address,0,[23,255])
-		time.sleep(0.1)
-		bus.write_i2c_block_data(address,0,[0,64])
-		time.sleep(0.1)
-		bus.write_i2c_block_data(address,0,[13,127])
+		bus.write_i2c_block_data(address,23,[255])
+		bus.write_i2c_block_data(address,0,[64])
+		bus.write_i2c_block_data(address,0x0D,[127])
 	#set device to not be trusted and transfer mode to command mode everytime
 	global trust_device
 	global transfer_mode
@@ -388,18 +404,12 @@ def when_client_connects():
 #function that gets called when a device disconnects from the server
 def when_client_disconnects():
 	with SMBus(2) as bus:
-		# bus.write_i2c_block_data(address,0,[23,255])
-		# time.sleep(0.1)
-		# bus.write_i2c_block_data(address,0,[0,64])
-		# time.sleep(0.1)
-		bus.write_i2c_block_data(address,0,[13,0])
+		bus.write_i2c_block_data(address,0x0D,[0])
 	print("connection lost")
 
 #defines a variable which can be interacted with for bluetooth functions
 #sets up callback functions and how the received/sent data is processed
 s = BluetoothServer(data_received, True, "hci0", 1, None, False, when_client_connects, when_client_disconnects)
+global address
 address = 20
-# g = Github("")
-# r = g.get_repo("Rick-GO/GOcontroll-Moduline")
-# print(r)
 pause()
