@@ -1,19 +1,17 @@
 #!/usr/bin/python3
-from audioop import add
 from ftplib import error_perm
 from socketserver import ThreadingUnixStreamServer
 from bluedot.btcomm import BluetoothServer
 import requests
 from signal import pause
 from os.path import exists
-from pathlib import Path
 import subprocess
 import time
 import rfcommServerConstants as commands
 import hashlib
 from smbus2 import SMBus
 from github import Github
-# from github import Github
+import threading
 
 def md5(fname):
 	hash_md5 = hashlib.md5()
@@ -379,6 +377,25 @@ def command_list(byte, string):
 #bluetooth rfcomm server setup
 ##########################################################################################
 
+def status_led_on():
+	direction = 0
+	brightness = 0
+	while 1 == 1:
+		time.sleep(0.01)
+		if direction == 0:
+			brightness += 1
+		else:
+			brightness -= 1
+		with SMBus(2) as bus:
+			bus.write_i2c_block_data(address,0x0D,[brightness])
+		if brightness == 127:
+			direction = 1
+		if brightness == 0:
+			direction = 0
+			if kill_threads:
+				break
+		
+
 #slightly expanded s.send function so not every command has to convert the string to bytes
 def send(string):
 	s.send(bytes(string, 'utf-8'))
@@ -408,10 +425,14 @@ def data_received(data):
 
 #function that gets called when a device connects to the server
 def when_client_connects():
+	global tf
+	global kill_threads
+	kill_threads = False
 	with SMBus(2) as bus:
 		bus.write_i2c_block_data(address,23,[255])
 		bus.write_i2c_block_data(address,0,[64])
-		bus.write_i2c_block_data(address,0x0D,[127])
+		tf = threading.Thread(target=status_led_on)
+		tf.start()
 	#set device to not be trusted and transfer mode to command mode everytime
 	global trust_device
 	global transfer_mode
@@ -432,8 +453,8 @@ def when_client_connects():
 
 #function that gets called when a device disconnects from the server
 def when_client_disconnects():
-	with SMBus(2) as bus:
-		bus.write_i2c_block_data(address,0x0D,[0])
+	global kill_threads
+	kill_threads=True
 	print("connection lost")
 
 #defines a variable which can be interacted with for bluetooth functions
