@@ -300,6 +300,32 @@ def write_device_name(name):
 
 ##########################################################################################
 
+#handle the running services for the controller programs activity
+
+def update_controller_services(commandnmbr, arg):
+	level1 = ord(arg[0])
+	statusses = []
+	if level1 == commands.GET_RUNNING_SERVICES:
+		services = arg.split("\n")[1].split(":")
+		for service in services:
+			stdout = subprocess.run(["systemctl", "is-active", service], stdout=subprocess.PIPE, text=True)
+			status = stdout.stdout[:-1]
+			print(len(status))
+			statusses.append(status)
+		send(chr(commands.UPDATE_CONTROLLER_SERVICES)+chr(commands.GET_RUNNING_SERVICES) + ":".join(statusses))
+	elif level1 == commands.SET_SERVICE:
+		data = arg.split("\n")[1].split(":")
+		service = data[-1]
+		new_states = data[:-1]
+		if len(data)>2:
+			for new_state in new_states:
+				subprocess.run(["systemctl", new_state, service])
+		else:
+			subprocess.run(["systemctl", data[0], data[1]])
+
+
+##########################################################################################
+
 #reboot the controller
 
 def reboot_controller():
@@ -336,6 +362,9 @@ def command_list(byte, string):
 		return
 	elif byte == commands.UPDATE_CONTROLLER_SETTINGS:
 		update_controller_settings(byte,string)
+		return
+	elif byte == commands.UPDATE_CONTROLLER_SERVICES:
+		update_controller_services(byte,string)
 		return
 	elif byte == commands.REBOOT_CONTROLLER:
 		reboot_controller()
