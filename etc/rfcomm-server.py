@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+from asyncio import constants
 from ftplib import error_perm
 from socketserver import ThreadingUnixStreamServer
 from bluedot.btcomm import BluetoothServer
@@ -194,35 +195,43 @@ def receive_zip(data):
 #picks up available networks and sends them and the connection status to the app
 
 
-def get_wifi_networks(commandnmbr):
-	#get the list of networks available to the controller
-	wifi_list = subprocess.run(["nmcli", "-t", "dev", "wifi"], stdout=subprocess.PIPE, text=True) #(gets the list in a layout optimal for scripting, networks seperated by \n, columns seperated by :)
-	#split up the data and filter the important information
-	networks = wifi_list.stdout[:-1].split("\n") #split the list at \n characters
-	i=len(networks)-1 #set up a variable to loop through the list from the back
-	for n in range(len(networks)):
-		networks[i] = networks[i].split(":") #split every network up into its components at the : characters
-		#print(networks[i])
-		if len(networks[i]) < 2:
-			networks.pop(i)
-		elif networks[i][1]=="": #if this is true the current index contains a network with no name
-			networks.pop(i) #remove the networks without a name
-		else:
-			networks[i].pop(6) #remove the columns of information that dont matter
-			networks[i].pop(4)
-			networks[i].pop(3)
-			networks[i].pop(2)
-			#print(ord(networks[i][0]))
-			if networks[i][3] == "":
-				networks[i][3] = "No Security"
-			networks[i] = ":".join(networks[i]) #recombine data to send
-		i -=1				#iterate 
+def get_wireless_information(commandnmbr, arg):
+	level1 = ord(arg[0])
+	if level1 == commands.INIT_WIRELESS_SETTINGS:
+		out = subprocess.run(["systemctl", "is-active", "hostapd"], stdout=subprocess.PIPE, text=True)
+		status = out.stdout[:-1]
+		send(chr(commands.GET_WIRELESS_INFORMATION) + chr(commands.INIT_WIRELESS_SETTINGS) + status)
+	elif level1 == commands.GET_WIFI_NETWORKS:
+		#get the list of networks available to the controller
+		wifi_list = subprocess.run(["nmcli", "-t", "dev", "wifi"], stdout=subprocess.PIPE, text=True) #(gets the list in a layout optimal for scripting, networks seperated by \n, columns seperated by :)
+		#split up the data and filter the important information
+		networks = wifi_list.stdout[:-1].split("\n") #split the list at \n characters
+		i=len(networks)-1 #set up a variable to loop through the list from the back
+		for n in range(len(networks)):
+			networks[i] = networks[i].split(":") #split every network up into its components at the : characters
+			#print(networks[i])
+			if len(networks[i]) < 2:
+				networks.pop(i)
+			elif networks[i][1]=="": #if this is true the current index contains a network with no name
+				networks.pop(i) #remove the networks without a name
+			else:
+				networks[i].pop(6) #remove the columns of information that dont matter
+				networks[i].pop(4)
+				networks[i].pop(3)
+				networks[i].pop(2)
+				#print(ord(networks[i][0]))
+				if networks[i][3] == "":
+					networks[i][3] = "No Security"
+				networks[i] = ":".join(networks[i]) #recombine data to send
+			i -=1				#iterate 
 
-	networks = "\n".join(networks) #recombine data to send
-	#print(networks)
-	#send data
-	send(chr(commandnmbr) + networks)
-	return
+		networks = "\n".join(networks) #recombine data to send
+		#print(networks)
+		#send data
+		send(chr(commandnmbr) + chr(commands.GET_WIFI_NETWORKS) + networks)
+		return
+	elif level1 == commands.GET_CONNECTED_DEVICES:
+		print("send connected devices")
 
 #send(getwifinetworks + net list)
 ##########################################################################################
@@ -252,7 +261,7 @@ def connect_to_wifi(commandnmbr, arg):
 	#give feedback to the app
 	send(chr(commandnmbr) + chr(connection_result))
 	#update wifi list to change the state of the network
-	get_wifi_networks(commands.GET_WIFI_NETWORKS)
+	get_wireless_information(commands.GET_WIFI_NETWORKS, chr(commands.GET_WIFI_NETWORKS))
 
 #send(connecttowifi + result int)
 ##########################################################################################
@@ -276,7 +285,7 @@ def disconnect_from_wifi(commandnmbr, arg):
 	#give feedback to the app
 	send(chr(commandnmbr) + chr(disconnection_result))
 	#update wifi list to change the state of the network
-	get_wifi_networks(commands.GET_WIFI_NETWORKS)
+	get_wireless_information(commands.GET_WIFI_NETWORKS, chr(commands.GET_WIFI_NETWORKS))
 
 #send(disconnectfromwifi + result int)
 ##########################################################################################
@@ -308,7 +317,6 @@ def update_controller_services(commandnmbr, arg):
 		for service in services:
 			stdout = subprocess.run(["systemctl", "is-active", service], stdout=subprocess.PIPE, text=True)
 			status = stdout.stdout[:-1]
-			print(len(status))
 			statusses.append(status)
 		send(chr(commands.UPDATE_CONTROLLER_SERVICES)+chr(commands.GET_RUNNING_SERVICES) + ":".join(statusses))
 	elif level1 == commands.SET_SERVICE:
@@ -349,8 +357,8 @@ def command_list(byte, string):
 	elif byte == commands.SET_TRANSFER_MODE:
 		set_transfer_mode(byte, string)
 		return
-	elif byte == commands.GET_WIFI_NETWORKS:
-		get_wifi_networks(byte)
+	elif byte == commands.GET_WIRELESS_INFORMATION:
+		get_wireless_information(byte, string)
 		return
 	elif byte == commands.CONNECT_TO_WIFI:
 		connect_to_wifi(byte, string)
