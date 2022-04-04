@@ -1,11 +1,7 @@
 #!/usr/bin/python3
-from asyncio import constants
-from ftplib import error_perm
-from socketserver import ThreadingUnixStreamServer
 from bluedot.btcomm import BluetoothServer
 import requests
 from signal import pause
-from os.path import exists
 import subprocess
 import time
 import rfcommServerConstants as commands
@@ -13,6 +9,8 @@ import hashlib
 from smbus2 import SMBus
 from github import Github
 import threading
+import os
+import zipfile
 
 def md5(fname):
 	hash_md5 = hashlib.md5()
@@ -20,6 +18,15 @@ def md5(fname):
 		for chunk in iter(lambda: f.read(4096), b""):
 			hash_md5.update(chunk)
 	return hash_md5.hexdigest()
+
+def get_line(path, search_term):
+	with open(path, "r") as file:
+		i =0
+		for line in file:
+			line_split = line.split("=")
+			if search_term == line_split[0]:
+				return i
+			i += 1
 
 ##########################################################################################
 #commands to be executed by controller
@@ -64,13 +71,26 @@ def update_controller(commandnmbr, arg):
 			level2 = ord(arg[1])
 			if (level2 == commands.UPDATE_FILE_APROVED):
 				print("file was aproved")
-				send(chr(commandnmbr) + chr(commands.UPDATE_STORED_SHA))
+				sha = arg[2:]
+				# with open("/etc/module-firmware-update/lastupdatecheck.txt", "w") as file:
+				# 	file.write(sha)
+				with zipfile.ZipFile("/tmp/temporary.zip", "r") as zip_ref:
+					zip_ref.extractall("/etc/module-firmware-update")
+				os.remove("/tmp/temporary.zip")	
+				send(chr(commandnmbr) + chr(commands.UPDATE_LOCAL_SUCCES))
 			else:
 				print("file was corrupted")
-		elif (level1==commands.UPDATE_STORED_SHA):
-			sha = arg[1:]
-			# with open("/etc/module-firmware-update/lastupdatecheck.txt", "w") as file:
-			# 	file.write(sha)
+				os.remove("/tmp/temporary.zip")	
+		elif (level1==commands.UPDATE_CONTROLLER_LOCAL):
+			global file_urls
+			for url in file_urls:
+				name = url.split("/")[-1]
+				file = requests.get(url,stream=True)
+				with open("/etc/module-firmware-update/"+name,"wb") as srec:
+					for chunk in file.iter_content(chunk_size=1024):
+						if chunk:
+							srec.write(chunk)
+			send(chr(commandnmbr) + chr(commands.UPDATE_LOCAL_SUCCES))
 
 ###########################################################################################
 
@@ -98,8 +118,8 @@ def get_controller_version(commandnmbr, arg):
 			first_run=0
 			global last_commit_sha
 			for c in cs:
-				print("commit found: ")
-				print(c.commit.author.date)
+				#print("commit found: ")
+				#print(c.commit.author.date)
 				if first_run==0:
 					last_commit_sha = c.sha
 					first_run += 1
@@ -109,8 +129,9 @@ def get_controller_version(commandnmbr, arg):
 					if "srec" in file.filename:
 						file_urls.append(file.raw_url)
 			if len(file_urls) > 0:
-				print(file_urls)
-				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
+				#print(file_urls)
+				#send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
+				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
 			else:
 				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE))
 
@@ -174,7 +195,7 @@ def receive_zip(data):
 		with open("/tmp/temporary." + "zip", "wb") as file:
 			file.write(data)
 		first_write =0
-		print("receiving file")
+		#print("receiving file")
 	else:
 		with open("/tmp/temporary." + "zip", "ab") as file:
 			file.write(data)
@@ -184,9 +205,10 @@ def receive_zip(data):
 		transfer_mode = "command"
 		#inform the app that the file has been transferred and that commands are open again
 		checksum = md5("/tmp/temporary.zip")
+		time.sleep(0.3)
 		send(chr(commands.SET_TRANSFER_MODE)+chr(commands.FILE_TRANSFER_COMPLETE)+checksum)
 		
-		print("commands enabled")
+		#print("commands enabled")
 
 #send(filetransfer + filetransfer state + (progress))
 ###########################################################################################
@@ -198,9 +220,14 @@ def receive_zip(data):
 def get_wireless_information(commandnmbr, arg):
 	level1 = ord(arg[0])
 	if level1 == commands.INIT_WIRELESS_SETTINGS:
-		out = subprocess.run(["systemctl", "is-active", "hostapd"], stdout=subprocess.PIPE, text=True)
+		out = subprocess.run(["nmcli", "d", "s"], stdout=subprocess.PIPE, text=True)
 		status = out.stdout[:-1]
-		send(chr(commands.GET_WIRELESS_INFORMATION) + chr(commands.INIT_WIRELESS_SETTINGS) + status)
+		if "GOcontroll-ap" in status:
+			status = "ap"
+			send(chr(commands.GET_WIRELESS_INFORMATION) + chr(commands.INIT_WIRELESS_SETTINGS) + status)
+		else:
+			status = "wifi"
+			send(chr(commands.GET_WIRELESS_INFORMATION) + chr(commands.INIT_WIRELESS_SETTINGS) + status)
 	elif level1 == commands.GET_WIFI_NETWORKS:
 		#get the list of networks available to the controller
 		wifi_list = subprocess.run(["nmcli", "-t", "dev", "wifi"], stdout=subprocess.PIPE, text=True) #(gets the list in a layout optimal for scripting, networks seperated by \n, columns seperated by :)
@@ -232,6 +259,15 @@ def get_wireless_information(commandnmbr, arg):
 		return
 	elif level1 == commands.GET_CONNECTED_DEVICES:
 		print("send connected devices")
+	elif level1 == commands.INIT_AP_SETTINGS:
+		path = "/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection"
+		with open(path , "r") as settings:
+			file = settings.readlines()
+			ssid_line = get_line(path, "ssid")
+			psk_line = get_line(path, "psk")
+			ssid = file[ssid_line].split("=")[1][:-1]
+			psk = file[psk_line].split("=")[1][:-1]
+		send(chr(commandnmbr) + chr(commands.INIT_AP_SETTINGS) + ssid + ":" + psk)
 
 #send(getwifinetworks + net list)
 ##########################################################################################
@@ -293,13 +329,48 @@ def disconnect_from_wifi(commandnmbr, arg):
 #update the general controller settings
 
 def update_controller_settings(commandnmbr, arg):
-	if "GOcontroll" in arg:
-		write_device_name(arg)
-	else:
-		arg = "GOcontroll-" + arg
-		write_device_name(arg)
+	level1 = ord(arg[0])
+	arg = arg[1:]
+	if level1 == commands.UPDATE_BLUETOOTH_SETTINGS:
+		if "GOcontroll" in arg:
+			write_device_name(arg)
+		else:
+			arg = "GOcontroll-" + arg
+			write_device_name(arg)
+	elif level1 == commands.UPDATE_WIRELESS_SETTINGS:
+		level2 = ord(arg[0])
+		arg = arg[1:]
+		if level2 == commands.SWITCH_MODE:
+			if arg == "ap":
+				stdout = subprocess.run(["nmcli", "con", "up", "GOcontroll-ap"], stdout=subprocess.PIPE, text=True)
+				result = stdout.stdout
+				if "successfully" in result:
+					send(chr(commandnmbr) + chr(commands.UPDATE_WIRELESS_SETTINGS) + chr(commands.SWITCH_MODE) + "ap")
+				else:
+					send(chr(commandnmbr) + chr(commands.UPDATE_WIRELESS_SETTINGS) + chr(commands.SWITCH_MODE) + "error")
+			elif arg == "wifi":
+				stdout = subprocess.run(["nmcli", "con", "down", "GOcontroll-ap"], stdout=subprocess.PIPE, text=True)
+				result = stdout.stdout
+				if "successfully" in result:
+					send(chr(commandnmbr) + chr(commands.UPDATE_WIRELESS_SETTINGS) + chr(commands.SWITCH_MODE) + "wifi")
+				else:
+					send(chr(commandnmbr) + chr(commands.UPDATE_WIRELESS_SETTINGS) + chr(commands.SWITCH_MODE) + "error")
 
-	print(arg)
+		elif level2 == commands.SET_AP_SETTINGS:
+			arg = arg.split(":")
+			name = arg[0]
+			psk = arg[1]
+			name_line = get_line("/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection", "ssid")
+			psk_line = get_line("/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection", "psk")			
+			with open("/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection", "r") as ap:
+				file = ap.readlines()
+				file[name_line] = "ssid="+name+"\n"
+				file[psk_line] = "psk="+psk+"\n"
+			with open("/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection", "w") as ap:
+				ap.writelines(file)
+			subprocess.run(["systemctl", "restart", "NetworkManager"])
+			send(chr(commandnmbr) + chr(commands.UPDATE_WIRELESS_SETTINGS) + chr(commands.SET_AP_SETTINGS) + "done")
+
 
 def write_device_name(name):
 	with open("/etc/machine-info", "w") as file:
@@ -347,6 +418,7 @@ def command_list(byte, string):
 	#check which command needs to be executed
 	if byte == commands.VERIFY_DEVICE:
 		verify_device(byte, string)
+		#request_verification
 		return
 	elif byte == commands.UPDATE_CONTROLLER:
 		update_controller(byte, string)
@@ -356,6 +428,7 @@ def command_list(byte, string):
 		return
 	elif byte == commands.SET_TRANSFER_MODE:
 		set_transfer_mode(byte, string)
+		#receive_zip
 		return
 	elif byte == commands.GET_WIRELESS_INFORMATION:
 		get_wireless_information(byte, string)
@@ -368,6 +441,7 @@ def command_list(byte, string):
 		return
 	elif byte == commands.UPDATE_CONTROLLER_SETTINGS:
 		update_controller_settings(byte,string)
+		#write device name (bluetooth)
 		return
 	elif byte == commands.UPDATE_CONTROLLER_SERVICES:
 		update_controller_services(byte,string)
@@ -402,10 +476,25 @@ def status_led_on():
 			direction = 0
 			if kill_threads:
 				break
+def status_led_gocontroll():
+	with SMBus(2) as bus:
+				bus.write_i2c_block_data(address, 0x0D, [0])
+				bus.write_i2c_block_data(address, 0x0B, [165])
+				bus.write_i2c_block_data(address, 0x0C, [50])
+	while 1==1:
+		time.sleep(1)
+		if(kill_threads):
+			with SMBus(2) as bus:
+				bus.write_i2c_block_data(address, 0x0D, [0])
+				bus.write_i2c_block_data(address, 0x0B, [0])
+				bus.write_i2c_block_data(address, 0x0C, [0])
+			break
 		
 
 #slightly expanded s.send function so not every command has to convert the string to bytes
 def send(string):
+	print("out:")
+	print(bytes(string, 'utf-8'))
 	s.send(bytes(string, 'utf-8'))
 
 #function that gets called when the controller receives a message
@@ -439,7 +528,7 @@ def when_client_connects():
 	with SMBus(2) as bus:
 		bus.write_i2c_block_data(address,23,[255])
 		bus.write_i2c_block_data(address,0,[64])
-		tf = threading.Thread(target=status_led_on)
+		tf = threading.Thread(target=status_led_gocontroll)
 		tf.start()
 	#set device to not be trusted and transfer mode to command mode everytime
 	global trust_device

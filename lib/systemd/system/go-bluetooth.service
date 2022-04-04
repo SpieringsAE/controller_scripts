@@ -3,7 +3,7 @@ Description=GOcontroll Bluetooth Interface
 After=bluetooth.target
 
 [Service]
-Type=simple
+Type=forking
 RemainAfterExit=yes
 
 ExecStart=/usr/moduline/bash/go-bluetooth-start.sh
