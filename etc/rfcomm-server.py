@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+from re import sub
 from bluedot.btcomm import BluetoothServer
 import requests
 from signal import pause
@@ -11,6 +12,7 @@ from github import Github
 import threading
 import os
 import zipfile
+import netifaces as ni
 
 def md5(fname):
 	hash_md5 = hashlib.md5()
@@ -51,7 +53,7 @@ def verify_device(commandnmbr, arg):
 		#sleep for a bit because something goes wrong with the bluetooth messages if you dont
 		time.sleep(0.5)
 		#send controller version to the app because it hasnt done this upon connection due to not being verified
-		get_controller_version(commands.GET_CONTROLLER_VERSION)
+		get_controller_version(commands.GET_CONTROLLER_VERSION, chr(commands.GET_SHA))
 	else:
 		#inform the app that the entered passkey was not correct
 		request_verification(commands.DEVICE_VERIFICATION_INCORRECT_PASSKEY)
@@ -103,10 +105,9 @@ def get_controller_version(commandnmbr, arg):
 	
 	if (level1 == commands.GET_SHA):
 		#set the timeout time for the connection check
-		timeout =1
+		
 		#attempt to read the head of github.com to see if there is a connection available
-		try:
-			requests.head("https://www.github.com/", timeout=timeout)
+		if (check_connection(1)):
 			#tell the app the controller has internet so it can download the update itself
 			with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
 				sha = file.read()
@@ -137,7 +138,7 @@ def get_controller_version(commandnmbr, arg):
 
 			#TODO get the files from github to update
 
-		except requests.ConnectionError:
+		else:
 			#tell the app the controller is not connected to the internet and requires an update over bluetooth
 			#TODO add the latest update check date or sha
 			with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
@@ -153,6 +154,17 @@ def get_controller_version(commandnmbr, arg):
 			controller_name = file.read().split("=")
 		#return the versions to the app
 		send(chr(commandnmbr) + chr(commands.GET_SETTINGS_INFORMATION) + hardware_version + ":" + software_version + ":" + controller_name[1])
+
+def check_connection(timeout):
+	try:
+		requests.head("https://www.github.com/", timeout=timeout)
+		return True
+	except requests.ConnectionError:
+		try:
+			requests.head("httpx://www.google.com/", timeout=timeout)
+			return True
+		except requests.ConnectionError:
+			return False
 
 ###########################################################################################
 
@@ -222,12 +234,16 @@ def get_wireless_information(commandnmbr, arg):
 	if level1 == commands.INIT_WIRELESS_SETTINGS:
 		out = subprocess.run(["nmcli", "d", "s"], stdout=subprocess.PIPE, text=True)
 		status = out.stdout[:-1]
-		if "GOcontroll-ap" in status:
+		if check_connection(1):
+			connection_status = "True"
+		else:
+			connection_status = "False"
+		if "GOcontroll-ap" in status: 
 			status = "ap"
-			send(chr(commands.GET_WIRELESS_INFORMATION) + chr(commands.INIT_WIRELESS_SETTINGS) + status)
+			send(chr(commands.GET_WIRELESS_INFORMATION) + chr(commands.INIT_WIRELESS_SETTINGS) + status + ":" + connection_status)
 		else:
 			status = "wifi"
-			send(chr(commands.GET_WIRELESS_INFORMATION) + chr(commands.INIT_WIRELESS_SETTINGS) + status)
+			send(chr(commands.GET_WIRELESS_INFORMATION) + chr(commands.INIT_WIRELESS_SETTINGS) + status + ":" + connection_status)
 	elif level1 == commands.GET_WIFI_NETWORKS:
 		#get the list of networks available to the controller
 		wifi_list = subprocess.run(["nmcli", "-t", "dev", "wifi"], stdout=subprocess.PIPE, text=True) #(gets the list in a layout optimal for scripting, networks seperated by \n, columns seperated by :)
@@ -340,7 +356,7 @@ def update_controller_settings(commandnmbr, arg):
 	elif level1 == commands.UPDATE_WIRELESS_SETTINGS:
 		level2 = ord(arg[0])
 		arg = arg[1:]
-		if level2 == commands.SWITCH_MODE:
+		if level2 == commands.SWITCH_WIRELESS_MODE:
 			if arg == "ap":
 				stdout = subprocess.run(["nmcli", "con", "up", "GOcontroll-ap"], stdout=subprocess.PIPE, text=True)
 				result = stdout.stdout
@@ -400,6 +416,52 @@ def update_controller_services(commandnmbr, arg):
 		else:
 			subprocess.run(["systemctl", data[0], data[1]])
 
+##########################################################################################
+
+#ethernet settings
+
+def ethernet_settings(commandnmbr, arg):
+	path = "/etc/NetworkManager/system-connections/Wired connection static.nmconnection"
+	level1 = ord(arg[0])
+	arg = arg[1:]
+	if level1 == commands.GET_ETHERNET_SETTINGS:
+		#get the list of connections
+		stdout = subprocess.run(["nmcli", "con"], stdout=subprocess.PIPE, text=True)
+		result = stdout.stdout
+		result = result.split("\n")
+		for name in result:
+			#get the static connection
+			if "static" in name:
+				#check if its active
+				if "eth0" in name:
+					mode= "static"
+				else:
+					mode= "auto"
+		#get the current ip address of the eth0 interface
+		ip = ni.ifaddresses("eth0")[ni.AF_INET][0]["addr"]
+		#get the static ip from the connection file
+		with open(path, "r") as con:
+			ip_line = get_line(path, "address1")
+			file = con.readlines()
+			ip_static = file[ip_line].split("=")[1]
+			ip_static = ip_static.split("/")[0]
+		#send all gathered information plus the connection status
+		send(chr(commandnmbr) + chr(commands.GET_ETHERNET_SETTINGS) + mode + ":" + ip_static + ":" + ip + ":" + str(check_connection(1)) )
+	elif level1 == commands.SET_ETHERNET_SETTINGS:
+		with open(path, "r") as con:
+			ip_line = get_line(path, "address1")
+			file  = con.readlines
+		with open(path, "w") as con:
+			file[ip_line] = "address1=" + arg + "/16\n"
+			con.writelines(file)
+		subprocess.run(["systemctl", "restart", "NetworkManager"])
+	elif level1 == commands.SWITCH_ETHERNET_MODE:
+		if arg == "true":
+			subprocess.run(["nmcli", "con", "up", "Wired connection static"])
+		else:
+			subprocess.run(["nmcli", "con", "up", "Wired connection auto"])
+		ethernet_settings(commands.ETHERNET_SETTINGS, chr(commands.GET_ETHERNET_SETTINGS) + "")
+	
 
 ##########################################################################################
 
@@ -425,6 +487,7 @@ def command_list(byte, string):
 		return
 	elif byte == commands.GET_CONTROLLER_VERSION:
 		get_controller_version(byte, string)
+		#check_connection
 		return
 	elif byte == commands.SET_TRANSFER_MODE:
 		set_transfer_mode(byte, string)
@@ -445,6 +508,9 @@ def command_list(byte, string):
 		return
 	elif byte == commands.UPDATE_CONTROLLER_SERVICES:
 		update_controller_services(byte,string)
+		return
+	elif byte == commands.ETHERNET_SETTINGS:
+		ethernet_settings(byte,string)
 		return
 	elif byte == commands.REBOOT_CONTROLLER:
 		reboot_controller()
@@ -477,18 +543,19 @@ def status_led_on():
 			if kill_threads:
 				break
 def status_led_gocontroll():
-	with SMBus(2) as bus:
-				bus.write_i2c_block_data(address, 0x0D, [0])
-				bus.write_i2c_block_data(address, 0x0B, [165])
-				bus.write_i2c_block_data(address, 0x0C, [50])
 	while 1==1:
-		time.sleep(1)
+		with SMBus(2) as bus:
+			bus.write_i2c_block_data(address, 0x0D, [0])
+			bus.write_i2c_block_data(address, 0x0B, [165])
+			bus.write_i2c_block_data(address, 0x0C, [50])
 		if(kill_threads):
-			with SMBus(2) as bus:
-				bus.write_i2c_block_data(address, 0x0D, [0])
-				bus.write_i2c_block_data(address, 0x0B, [0])
-				bus.write_i2c_block_data(address, 0x0C, [0])
 			break
+		time.sleep(0.5)
+		with SMBus(2) as bus:
+			bus.write_i2c_block_data(address, 0x0D, [0])
+			bus.write_i2c_block_data(address, 0x0B, [0])
+			bus.write_i2c_block_data(address, 0x0C, [0])
+		time.sleep(0.5)
 		
 
 #slightly expanded s.send function so not every command has to convert the string to bytes

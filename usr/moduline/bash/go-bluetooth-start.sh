@@ -7,6 +7,8 @@ bluetoothctl power on
 
 python3 /usr/moduline/python/make-agent.py &
 
+python3 /usr/moduline/python/init_led.py &
+
 #python3 /etc/rfcomm-server.py &
 
 
