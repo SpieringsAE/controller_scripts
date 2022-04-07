@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-from re import sub
 from bluedot.btcomm import BluetoothServer
 import requests
 from signal import pause
@@ -160,6 +159,12 @@ def check_connection(timeout):
 		requests.head("https://www.github.com/", timeout=timeout)
 		return True
 	except requests.ConnectionError:
+		try:
+			requests.head("httpx://www.google.com/", timeout=timeout)
+			return True
+		except requests.ConnectionError:
+			return False
+	except requests.ReadTimeout:
 		try:
 			requests.head("httpx://www.google.com/", timeout=timeout)
 			return True
@@ -448,13 +453,13 @@ def ethernet_settings(commandnmbr, arg):
 		#send all gathered information plus the connection status
 		send(chr(commandnmbr) + chr(commands.GET_ETHERNET_SETTINGS) + mode + ":" + ip_static + ":" + ip + ":" + str(check_connection(1)) )
 	elif level1 == commands.SET_ETHERNET_SETTINGS:
+		ip_line = get_line(path, "address1")
 		with open(path, "r") as con:
-			ip_line = get_line(path, "address1")
-			file  = con.readlines
+			file = con.readlines()
+			file[ip_line] = "address1=192.168." + arg + "/16\n"
 		with open(path, "w") as con:
-			file[ip_line] = "address1=" + arg + "/16\n"
 			con.writelines(file)
-		subprocess.run(["systemctl", "restart", "NetworkManager"])
+		ethernet_settings(commands.ETHERNET_SETTINGS, chr(commands.GET_ETHERNET_SETTINGS) + "")
 	elif level1 == commands.SWITCH_ETHERNET_MODE:
 		if arg == "true":
 			subprocess.run(["nmcli", "con", "up", "Wired connection static"])
