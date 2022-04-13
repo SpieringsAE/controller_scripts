@@ -12,6 +12,9 @@ import threading
 import os
 import zipfile
 import netifaces as ni
+import serial
+from multiprocessing import Process
+import multiprocessing
 
 def md5(fname):
 	hash_md5 = hashlib.md5()
@@ -163,7 +166,7 @@ def check_connection(timeout):
 
 ###########################################################################################
 
-#set transfer mode
+#file transfer
 #switches between command mode and zip transfer mode.
 
 def file_transfer(commandnmbr, arg):
@@ -498,6 +501,70 @@ def controller_programs(commandnmbr, arg):
 
 ##########################################################################################
 
+def wwan_settings(commandnmbr, arg):
+	level1 = ord(arg[0])
+	arg = arg[1:]
+
+
+	if level1 == commands.INIT_WWAN_SETTINGS:
+		mmcli_info = ["WWAN is not enabled"]
+		sim_number = ["WWAN is not enabled"]
+		stdout = subprocess.run(["systemctl", "is-active", "go-wwan"], stdout=subprocess.PIPE, text=True)
+		status = [stdout.stdout[:-1]]
+		path = "/etc/NetworkManager/system-connections/GO-celular.nmconnection"
+		pin_line = get_line(path, "pin")
+		apn_line = get_line(path, "apn")
+		with open(path, "r") as con:
+			file = con.readlines()
+			pin = [file[pin_line].split("=")[1][:-1]]
+			apn = [file[apn_line].split("=")[1][:-1]]
+		if status[0] == "active":
+			mmcli = subprocess.Popen(("mmcli", "-K", "--modem=0"), stdout=subprocess.PIPE)
+			output = subprocess.check_output(("egrep", "model|signal-quality.value|imei|operator-name"), stdin=mmcli.stdout)
+			mmcli.wait()
+			at_result = sim_at_command("AT+CICCID\r", timeout=2)
+			mmcli_info = output[:-1].decode("utf-8").split("\n")
+			for i, info in enumerate(mmcli_info):
+				mmcli_info[i] = info.split(":")[1][1:]
+			if at_result == "Error":
+				at_result = "Unable to get SIM number"
+			else:
+				sim_number = [at_result[1].split(" ")[1].split("\r")[0]]
+		status_array = status+mmcli_info+pin+apn+sim_number
+		send(chr(commandnmbr) + chr(commands.INIT_WWAN_SETTINGS) + ":".join(status_array))
+
+		
+def sim_at_command(command, timeout=2):
+	recv_end, send_end = multiprocessing.Pipe(False)
+	ts = Process(target=read_serial, args=(send_end,))
+	ts.start()
+	time.sleep(1)
+	ser.write(bytes(command, "utf-8"))
+	ts.join()
+	# if ts.is_alive():
+	# 	ts.terminate()
+	# 	print("serial message read terminated forcefully")
+	result = recv_end.recv()
+	return result
+	
+
+
+def read_serial(send_end):
+	message_finished = False
+	response_array = []
+	while message_finished == False:
+		response = ser.readline().decode("utf-8")
+		response_array.append(response)
+		# print(response)
+		if "OK" in response:
+			send_end.send(response_array)
+			break
+		if "ERR" in response:
+			send_end.send("Error")
+			break
+
+##########################################################################################
+
 #reboot the controller
 
 def reboot_controller():
@@ -536,6 +603,9 @@ def command_list(byte, string):
 		return
 	elif byte == commands.CONTROLLER_PROGRAMS:
 		controller_programs(byte, string)
+		return
+	elif byte == commands.WWAN_SETTINGS:
+		wwan_settings(byte, string)
 		return
 	elif byte == commands.REBOOT_CONTROLLER:
 		reboot_controller()
@@ -651,4 +721,7 @@ def when_client_disconnects():
 s = BluetoothServer(data_received, True, "hci0", 1, None, False, when_client_connects, when_client_disconnects)
 global address
 address = 20
+ser = serial.Serial(port='/dev/ttymxc1', 
+	baudrate=115200)
+
 pause()
