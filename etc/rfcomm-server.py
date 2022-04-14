@@ -507,10 +507,14 @@ def wwan_settings(commandnmbr, arg):
 
 
 	if level1 == commands.INIT_WWAN_SETTINGS:
-		mmcli_info = ["WWAN is not enabled"]
-		sim_number = ["WWAN is not enabled"]
+		net_status = [str(check_connection(1))]
+		#preset variables incase not all information sources are available
+		mmcli_info = ["Info not available"]
+		sim_number = ["Info not available"]
+		#get status of go-wwan service
 		stdout = subprocess.run(["systemctl", "is-active", "go-wwan"], stdout=subprocess.PIPE, text=True)
 		status = [stdout.stdout[:-1]]
+		#gather info from the nmconnection file
 		path = "/etc/NetworkManager/system-connections/GO-celular.nmconnection"
 		pin_line = get_line(path, "pin")
 		apn_line = get_line(path, "apn")
@@ -519,19 +523,62 @@ def wwan_settings(commandnmbr, arg):
 			pin = [file[pin_line].split("=")[1][:-1]]
 			apn = [file[apn_line].split("=")[1][:-1]]
 		if status[0] == "active":
-			mmcli = subprocess.Popen(("mmcli", "-K", "--modem=0"), stdout=subprocess.PIPE)
-			output = subprocess.check_output(("egrep", "model|signal-quality.value|imei|operator-name"), stdin=mmcli.stdout)
-			mmcli.wait()
+			modem = subprocess.run(["mmcli", "--list-modems"], stdout=subprocess.PIPE, text=True)
+			modem = modem.stdout
+			if "/freedesktop/" in modem:
+				modem_number = modem.split("/")[-1].split(" ")[0]
+				#gather modemmanager information
+				try:
+					mmcli = subprocess.Popen(("mmcli", "-K", "--modem="+modem_number), stdout=subprocess.PIPE)
+					output = subprocess.check_output(("egrep", "model|signal-quality.value|imei|operator-name"), stdin=mmcli.stdout)
+					mmcli.wait()
+					mmcli_info = output[:-1].decode("utf-8").split("\n")
+					for i, info in enumerate(mmcli_info):
+						mmcli_info[i] = info.split(":")[1][1:]
+				except subprocess.CalledProcessError:
+					print("unable to get information from modemmanager")
+			#gather info from the modem over serial
 			at_result = sim_at_command("AT+CICCID\r", timeout=2)
-			mmcli_info = output[:-1].decode("utf-8").split("\n")
-			for i, info in enumerate(mmcli_info):
-				mmcli_info[i] = info.split(":")[1][1:]
 			if at_result == "Error":
 				at_result = "Unable to get SIM number"
 			else:
-				sim_number = [at_result[1].split(" ")[1].split("\r")[0]]
-		status_array = status+mmcli_info+pin+apn+sim_number
+				sim_number = [at_result.split(" ")[1].split("\r")[0]]
+		#combine all of the data
+		status_array = net_status+status+mmcli_info+pin+apn+sim_number
 		send(chr(commandnmbr) + chr(commands.INIT_WWAN_SETTINGS) + ":".join(status_array))
+
+
+	elif level1 == commands.SWITCH_WWAN:
+		arg = arg.split(":")
+		if arg[0] == "false":
+			print("stopping go-wwan")
+			subprocess.run(["systemctl", "stop", "go-wwan"])
+			subprocess.run(["systemctl", "disable", "go-wwan"])
+		else:
+			if arg[1] == "false":
+				print("starting go-wwan")
+				subprocess.run(["systemctl", "enable", "go-wwan"])
+				subprocess.run(["systemctl", "start", "go-wwan"])
+			else: #service failed so needs to restart instead of start
+				print("restarting go-wwan")
+				subprocess.run(["systemctl", "restart", "go-wwan"])
+		send(chr(commandnmbr) + chr(commands.SWITCH_WWAN))
+
+
+
+	elif level1 == commands.SET_WWAN_SETTINGS:
+		arg = arg.split(":")
+		#arg = [pin,apn]
+		path = "/etc/NetworkManager/system-connections/GO-celular.nmconnection"
+		pin_line = get_line(path, "pin")
+		apn_line = get_line(path, "apn")
+		with open(path, "r") as con:
+			file = con.readlines()
+			file[pin_line] = "ssid="+arg[0]+"\n"
+			file[apn_line] = "psk="+arg[1]+"\n"
+		with open(path, "w") as con:
+			con.writelines(file)
+		send(chr(commandnmbr) + chr(commands.SET_WWAN_SETTINGS))
 
 		
 def sim_at_command(command, timeout=2):
@@ -540,26 +587,29 @@ def sim_at_command(command, timeout=2):
 	ts.start()
 	time.sleep(1)
 	ser.write(bytes(command, "utf-8"))
-	ts.join()
-	# if ts.is_alive():
-	# 	ts.terminate()
-	# 	print("serial message read terminated forcefully")
-	result = recv_end.recv()
-	return result
+	time.sleep(timeout)
+	if ts.is_alive():
+		ts.terminate()
+		return "Error"
+	else:
+		result = recv_end.recv()
+		return result
 	
-
 
 def read_serial(send_end):
 	message_finished = False
-	response_array = []
 	while message_finished == False:
-		response = ser.readline().decode("utf-8")
-		response_array.append(response)
-		# print(response)
-		if "OK" in response:
-			send_end.send(response_array)
-			break
-		if "ERR" in response:
+		try:
+			response = ser.readline().decode("utf-8")
+			if "+ICCID:" in response:
+				final_response = response
+			if "OK" in response:
+				send_end.send(final_response)
+				break
+			if "ERR" in response:
+				send_end.send("Error")
+				break
+		except UnicodeDecodeError:
 			send_end.send("Error")
 			break
 
