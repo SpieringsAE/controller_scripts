@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+from re import T
 from bluedot.btcomm import BluetoothServer
 import requests
 from signal import pause
@@ -583,7 +584,7 @@ def wwan_settings(commandnmbr, arg):
 		
 def sim_at_command(command, timeout=2):
 	recv_end, send_end = multiprocessing.Pipe(False)
-	ts = Process(target=read_serial, args=(send_end,))
+	ts = Process(target=read_serial_CICCID, args=(send_end,))
 	ts.start()
 	time.sleep(1)
 	ser.write(bytes(command, "utf-8"))
@@ -596,7 +597,7 @@ def sim_at_command(command, timeout=2):
 		return result
 	
 
-def read_serial(send_end):
+def read_serial_CICCID(send_end):
 	message_finished = False
 	while message_finished == False:
 		try:
@@ -612,6 +613,52 @@ def read_serial(send_end):
 		except UnicodeDecodeError:
 			send_end.send("Error")
 			break
+
+##########################################################################################
+
+#manage can settings
+
+def can_settings(commandnmbr, arg):
+	level1 = ord(arg[0])
+	arg = arg[1:]
+	if level1 == commands.INIT_CAN_SETTINGS:
+		print("Gathering can info")
+
+	
+	elif level1 ==commands.SET_CAN_BAUDRATE:
+		print("setting new can baudrate")
+
+
+	elif level1 == commands.CAN_BUS_LOAD:
+		global read_can_bus_load
+		read_can_bus_load = not read_can_bus_load
+		if read_can_bus_load:
+			monitor_can_load(["can0@250000:can1@250000"])
+		print("monitoring can bus load")
+		
+
+def monitor_can_load(interfaces):
+	ts = threading.Thread(target=bus_load_process, args=(interfaces))
+	ts.start()
+	
+
+def bus_load_process(interfaces):
+	if len(interfaces) >1:
+		interfaces = interfaces.split(":")
+	busload = subprocess.Popen(["canbusload"]+interfaces, stdout=subprocess.PIPE, text=True)		
+	while True:
+		output = busload.stdout.readline()
+		if busload.poll() is not None or read_can_bus_load == False:
+			break
+		if output:
+			output_split = output.strip().split(" ")
+			if len(output_split) > 1:
+				interface = output_split[0].split("@")[0]
+				load = output_split[-1]
+				send(chr(commands.CAN_SETTINGS) + chr(commands.CAN_BUS_LOAD) + interface + ":" + load)
+				time.sleep(0.1)
+
+
 
 ##########################################################################################
 
@@ -656,6 +703,9 @@ def command_list(byte, string):
 		return
 	elif byte == commands.WWAN_SETTINGS:
 		wwan_settings(byte, string)
+		return
+	elif byte == commands.CAN_SETTINGS:
+		can_settings(byte, string)
 		return
 	elif byte == commands.REBOOT_CONTROLLER:
 		reboot_controller()
@@ -734,8 +784,10 @@ def data_received(data):
 
 #function that gets called when a device connects to the server
 def when_client_connects():
+	global read_can_bus_load
 	global tf
 	global kill_threads
+	read_can_bus_load = False
 	kill_threads = False
 	with SMBus(2) as bus:
 		bus.write_i2c_block_data(address,23,[255])
