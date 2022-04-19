@@ -28,10 +28,10 @@ def get_line(path, search_term):
 	with open(path, "r") as file:
 		i =0
 		for line in file:
-			line_split = line.split("=")
-			if search_term == line_split[0]:
+			if search_term in line:
 				return i
 			i += 1
+		return False
 
 ##########################################################################################
 #commands to be executed by controller
@@ -248,14 +248,14 @@ def ethernet_settings(commandnmbr, arg):
 		ip = ni.ifaddresses("eth0")[ni.AF_INET][0]["addr"]
 		#get the static ip from the connection file
 		with open(path, "r") as con:
-			ip_line = get_line(path, "address1")
+			ip_line = get_line(path, "address1=")
 			file = con.readlines()
 			ip_static = file[ip_line].split("=")[1]
 			ip_static = ip_static.split("/")[0]
 		#send all gathered information plus the connection status
 		send(chr(commandnmbr) + chr(commands.INIT_ETHERNET_SETTINGS) + mode + ":" + ip_static + ":" + ip + ":" + str(check_connection(1)) )
 	elif level1 == commands.SET_ETHERNET_SETTINGS:
-		ip_line = get_line(path, "address1")
+		ip_line = get_line(path, "address1=")
 		with open(path, "r") as con:
 			file = con.readlines()
 			file[ip_line] = "address1=192.168." + arg + "/16\n"
@@ -339,8 +339,8 @@ def wireless_settings(commandnmbr, arg):
 		path = "/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection"
 		with open(path , "r") as settings:
 			file = settings.readlines()
-			ssid_line = get_line(path, "ssid")
-			psk_line = get_line(path, "psk")
+			ssid_line = get_line(path, "ssid=")
+			psk_line = get_line(path, "psk=")
 			ssid = file[ssid_line].split("=")[1][:-1]
 			psk = file[psk_line].split("=")[1][:-1]
 		send(chr(commandnmbr) + chr(commands.INIT_AP_SETTINGS) + ssid + ":" + psk)
@@ -421,8 +421,8 @@ def access_point_settings(commandnmbr, arg):
 		arg = arg.split(":")
 		name = arg[0]
 		psk = arg[1]
-		name_line = get_line("/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection", "ssid")
-		psk_line = get_line("/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection", "psk")			
+		name_line = get_line("/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection", "ssid=")
+		psk_line = get_line("/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection", "psk=")			
 		with open("/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection", "r") as ap:
 			file = ap.readlines()
 			file[name_line] = "ssid="+name+"\n"
@@ -437,8 +437,8 @@ def access_point_settings(commandnmbr, arg):
 		path = "/etc/NetworkManager/system-connections/GOcontroll-ap.nmconnection"
 		with open(path , "r") as settings:
 			file = settings.readlines()
-			ssid_line = get_line(path, "ssid")
-			psk_line = get_line(path, "psk")
+			ssid_line = get_line(path, "ssid=")
+			psk_line = get_line(path, "psk=")
 			ssid = file[ssid_line].split("=")[1][:-1]
 			psk = file[psk_line].split("=")[1][:-1]
 		send(chr(commandnmbr) + chr(commands.INIT_AP_SETTINGS) + ssid + ":" + psk)
@@ -517,8 +517,8 @@ def wwan_settings(commandnmbr, arg):
 		status = [stdout.stdout[:-1]]
 		#gather info from the nmconnection file
 		path = "/etc/NetworkManager/system-connections/GO-celular.nmconnection"
-		pin_line = get_line(path, "pin")
-		apn_line = get_line(path, "apn")
+		pin_line = get_line(path, "pin=")
+		apn_line = get_line(path, "apn=")
 		with open(path, "r") as con:
 			file = con.readlines()
 			pin = [file[pin_line].split("=")[1][:-1]]
@@ -571,8 +571,8 @@ def wwan_settings(commandnmbr, arg):
 		arg = arg.split(":")
 		#arg = [pin,apn]
 		path = "/etc/NetworkManager/system-connections/GO-celular.nmconnection"
-		pin_line = get_line(path, "pin")
-		apn_line = get_line(path, "apn")
+		pin_line = get_line(path, "pin=")
+		apn_line = get_line(path, "apn=")
 		with open(path, "r") as con:
 			file = con.readlines()
 			file[pin_line] = "ssid="+arg[0]+"\n"
@@ -619,28 +619,78 @@ def read_serial_CICCID(send_end):
 #manage can settings
 
 def can_settings(commandnmbr, arg):
+	global read_can_bus_load
 	level1 = ord(arg[0])
 	arg = arg[1:]
 	if level1 == commands.INIT_CAN_SETTINGS:
+		read_can_bus_load = False
 		print("Gathering can info")
+		path = "/etc/network/interfaces"
+		can_ifs_string = ""
+
+		ip_a_info = subprocess.run(["ip", "-br", "a"], stdout=subprocess.PIPE, text=True)
+		ip_a_info = ip_a_info.stdout
+		ip_a_info_arr = ip_a_info.split("\n")
+		for i in range(4):
+			baudrate = "0"
+			can_if = "|"
+			if f"can{i}" in ip_a_info:
+				can_if = "_"
+				index = [idx for idx, s in enumerate(ip_a_info_arr) if f"can{i}" in s][0]
+				if "UP" in ip_a_info_arr[index]:
+					can_if = "-"
+				baudrate = get_baudrate(i)
+				baudrate = int(int(baudrate)/1000)
+			can_ifs_string = f"{can_ifs_string}{can_if}:{baudrate} kBit/s\n"
+		can_ifs_string = can_ifs_string[:-1]
+		send(chr(commandnmbr) + chr(commands.INIT_CAN_SETTINGS)+can_ifs_string)
 
 	
 	elif level1 ==commands.SET_CAN_BAUDRATE:
-		print("setting new can baudrate")
+		#arg= "interface:baudrate(int):state(up or down)"
+		arg = arg.split(":")
+		path = "/etc/network/interfaces"
+		search_string = f"iface {arg[0]} inet manual"
+		interface_line = get_line(path, search_string)
+		if interface_line is not False:
+			with open(path, "r") as interfaces:
+				file = interfaces.readlines()
+			line = file[interface_line+1]
+			line = line.split(" ")
+			line[8] = arg[1]
+			line = " ".join(line)
+			file[interface_line+1] = line
+			with open(path, "w") as interfaces:
+				interfaces.writelines(file)
+			if arg[2] == "up":
+				subprocess.run(["ifdown", arg[0]])
+				time.sleep(0.2)
+				subprocess.run(["ifup", arg[0]])
+		send(chr(commandnmbr) + chr(commands.SET_CAN_BAUDRATE))
+
 
 
 	elif level1 == commands.CAN_BUS_LOAD:
-		global read_can_bus_load
+		time.sleep(1)
+		interfaces = arg.split(":")
+		for i,interface in enumerate(interfaces):
+			interfaces[i] = f"can{interface}@"+get_baudrate(interface)
+		interfaces = [":".join(interfaces)]
 		read_can_bus_load = not read_can_bus_load
 		if read_can_bus_load:
-			monitor_can_load(["can0@250000:can1@250000"])
-		print("monitoring can bus load")
-		
+			ts = threading.Thread(target=bus_load_process, args=(interfaces))
+			ts.start()
 
-def monitor_can_load(interfaces):
-	ts = threading.Thread(target=bus_load_process, args=(interfaces))
-	ts.start()
-	
+
+	elif level1 == commands.SET_CAN_STATE:
+		read_can_bus_load = False
+		arg = arg.split(":")
+		if arg[1] == "true":
+			subprocess.run(["ifup", arg[0]])
+		else:
+			subprocess.run(["ifdown", arg[0]])
+		send(chr(commandnmbr) + chr(commands.SET_CAN_STATE))
+			
 
 def bus_load_process(interfaces):
 	if len(interfaces) >1:
@@ -659,6 +709,17 @@ def bus_load_process(interfaces):
 				time.sleep(0.1)
 
 
+def get_baudrate(x):
+	path = "/etc/network/interfaces"
+	search_string = f"iface can{x} inet manual"
+	interface_line = get_line(path, search_string)
+	if interface_line is not False:
+		with open(path, "r") as interfaces:
+			file = interfaces.readlines()
+		line = file[interface_line+1]
+		line = line.split(" ")
+		return line[8]
+	return "0"
 
 ##########################################################################################
 
