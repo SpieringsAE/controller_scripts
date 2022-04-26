@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-from re import T
 from bluedot.btcomm import BluetoothServer
 import requests
 from signal import pause
@@ -277,9 +276,13 @@ def ethernet_settings(commandnmbr, arg):
 
 	elif level1 == commands.SWITCH_ETHERNET_MODE:
 		if arg == "true":
+			subprocess.run(["nmcli", "con", "mod", "Wired connection auto", "connection.autoconnect", "no"])
+			subprocess.run(["nmcli", "con", "mod", "Wired connection static", "connection.autoconnect", "yes"])
 			subprocess.run(["nmcli", "con", "up", "Wired connection static"])
 			mode = "static"
 		else:
+			subprocess.run(["nmcli", "con", "mod", "Wired connection auto", "connection.autoconnect", "yes"])
+			subprocess.run(["nmcli", "con", "mod", "Wired connection static", "connection.autoconnect", "no"])
 			subprocess.run(["nmcli", "con", "up", "Wired connection auto"])
 			mode = "auto"
 		ethernet_settings(commandnmbr, chr(commands.INIT_ETHERNET_SETTINGS) + "")
@@ -403,7 +406,18 @@ def wireless_settings(commandnmbr, arg):
 
 	
 	elif level1 == commands.SWITCH_WIRELESS_MODE:
+		stdout = subprocess.run(["nmcli", "-t", "con"], stdout=subprocess.PIPE, text=True)
+		stdout = stdout.stdout[:-1].split("\n")
+		wifi_connections = []
+		for i, con in enumerate(stdout):
+			if "wireless" in con:
+				if "GOcontroll-ap" not in con:
+					wifi_connections.append(con.split(":")[0])
+
 		if arg == "ap":
+			for con in wifi_connections:
+				subprocess.run(["nmcli", "con", "mod", con, "connection.autoconnect", "no"])
+			subprocess.run(["nmcli", "con", "mod", "GOcontroll-ap", "connection.autoconnect", "yes"])
 			stdout = subprocess.run(["nmcli", "con", "up", "GOcontroll-ap"], stdout=subprocess.PIPE, text=True)
 			result = stdout.stdout
 			if "successfully" in result:
@@ -411,6 +425,9 @@ def wireless_settings(commandnmbr, arg):
 			else:
 				send(chr(commandnmbr) + chr(commands.SWITCH_WIRELESS_MODE) + "error")
 		elif arg == "wifi":
+			for con in wifi_connections:
+				subprocess.run(["nmcli", "con", "mod", con, "connection.autoconnect", "yes"])
+			subprocess.run(["nmcli", "con", "mod", "GOcontroll-ap", "connection.autoconnect", "no"])
 			stdout = subprocess.run(["nmcli", "con", "down", "GOcontroll-ap"], stdout=subprocess.PIPE, text=True)
 			result = stdout.stdout
 			if "successfully" in result:
