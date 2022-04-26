@@ -630,8 +630,8 @@ def sim_at_command(command, timeout=2):
 	
 #seperate process that listens for the response from the modem
 def read_serial_CICCID(send_end):
-	message_finished = False
-	while message_finished == False:
+
+	while True:
 		try:
 			response = ser.readline().decode("utf-8")
 			if "+ICCID:" in response:
