@@ -25,9 +25,9 @@ Commit()
 
 	cp /lib/systemd/system/go-bluetooth.service /root/controller_scripts/lib/systemd/system/go-bluetooth.service
 
-	cp /etc/rfcomm-server.py /root/controller_scripts/etc/rfcomm-server.py
+	cp /usr/moduline/python/rfcomm-server.py /root/controller_scripts/usr/moduline/python/rfcomm-server.py
 
-	cp /etc/rfcommServerConstants.py /root/controller_scripts/etc/rfcommServerConstants.py
+	cp /usr/moduline/python/rfcommServerConstants.py /root/controller_scripts/usr/moduline/python/rfcommServerConstants.py
 
 	cp /etc/git-bash.sh /root/controller_scripts/etc/git-bash.sh
 
@@ -54,9 +54,9 @@ Pull()
 
 	cp /root/controller_scripts/lib/systemd/system/go-bluetooth.service /lib/systemd/system/go-bluetooth.service
 
-	cp /root/controller_scripts/etc/rfcomm-server.py /etc/rfcomm-server.py
+	cp /root/controller_scripts/usr/moduline/python/rfcomm-server.py /usr/moduline/python/rfcomm-server.py
 
-	cp /root/controller_scripts/etc/rfcommServerConstants.py /etc/rfcommServerConstants.py
+	cp /root/controller_scripts/usr/moduline/python/rfcommServerConstants.py /usr/moduline/python/rfcommServerConstants.py
 
 	cp /root/controller_scripts/etc/git-bash.sh /etc/git-bash.sh
 
