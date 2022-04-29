@@ -16,6 +16,7 @@ import serial
 from multiprocessing import Process
 import multiprocessing
 import json
+import glob
 
 #calculates the md5 checksum of a file
 def md5(fname):
@@ -790,7 +791,46 @@ def controller_configuration(commandnmbr, arg):
 		message_out = "\n".join(message_out)
 		send(chr(commandnmbr) + chr(level1) + message_out)
 
+##########################################################################################
 
+#module settings
+
+def module_settings(commandnmbr, arg):
+	level1 = ord(arg[0])
+	arg = arg[1:]
+
+	if level1 == commands.INIT_MODULE_SETTINGS:
+		mod_type = arg.split(":")
+		mod_slot = mod_type[1]
+		mod_type = mod_type[0]
+		available_firmwares = glob.glob("/etc/module-firmware-update/" + mod_type + "*.srec")
+		available_firmwares = available_firmwares + glob.glob("/usr/module-firmware/" + mod_type + "*.srec")
+		with open("/etc/module-firmware-update/module-info/modules.json") as j:
+			info = json.load(j)
+		modules = list(info.values())
+		current_firmware = modules[int(mod_slot)-1][1]
+		current_firmware = ".".join(current_firmware.split("-")[-3:])
+		for i,firmware in enumerate(available_firmwares):
+			firmware = firmware.split(".")[0]
+			firmware = firmware.split("-")[-3:]
+			available_firmwares[i] = ".".join(firmware)
+		available_firmwares = list(dict.fromkeys(available_firmwares))
+		send(chr(commandnmbr) + chr(level1) + ":".join(available_firmwares) + ":" + current_firmware)
+		
+
+	if level1 == commands.SET_NEW_FIRMWARE:
+		firmwares = arg.split(":")
+		new_firmware = firmwares[0]
+		old_firmware = firmwares[1]
+		try:
+			os.replace("/usr/module-firmware/"+old_firmware, "/etc/module-firmware-update/"+old_firmware)
+			os.replace("/etc/module-firmware-update/"+new_firmware, "/usr/module-firmware/"+new_firmware)
+		except:
+			send(chr(commandnmbr) + chr(level1) + "false")
+			return
+		send(chr(commandnmbr) + chr(level1) + "true")
+		
+		
 ##########################################################################################
 
 #reboot the controller
@@ -839,6 +879,9 @@ def command_list(byte, string):
 		return
 	elif byte == commands.CONTROLLER_CONFIGURATION:
 		controller_configuration(byte, string)
+		return
+	elif byte == commands.MODULE_SETTINGS:
+		module_settings(byte, string)
 		return
 	elif byte == commands.REBOOT_CONTROLLER:
 		reboot_controller()
