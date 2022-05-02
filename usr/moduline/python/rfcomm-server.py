@@ -836,6 +836,10 @@ def module_settings(commandnmbr, arg):
 #reboot the controller
 
 def reboot_controller():
+	s.disconnect_client()
+	global kill_threads_shutdown
+	kill_threads_shutdown = True
+	tf.join()
 	subprocess.run(["reboot"])
 
 ##########################################################################################
@@ -930,6 +934,8 @@ def status_led_gocontroll():
 			bus.write_i2c_block_data(address, 0x0B, [0])
 			bus.write_i2c_block_data(address, 0x0C, [0])
 		time.sleep(0.5)
+		if(kill_threads_shutdown):
+			break
 		
 
 #slightly expanded s.send function so not every command has to convert the string to bytes
@@ -960,8 +966,10 @@ def when_client_connects():
 	global read_can_bus_load
 	global tf
 	global kill_threads
+	global kill_threads_shutdown
 	read_can_bus_load = False
 	kill_threads = False
+	kill_threads_shutdown = False
 	with SMBus(2) as bus:
 		bus.write_i2c_block_data(address,23,[255])
 		bus.write_i2c_block_data(address,0,[64])
