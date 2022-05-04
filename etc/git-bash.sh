@@ -21,11 +21,11 @@ Commit()
 
 	cp /usr/moduline/bash/go-bluetooth-start.sh /root/controller_scripts/usr/moduline/bash/go-bluetooth-start.sh
 
-	cp /usr/moduline/python/make-agent.py /root/controller_scripts/usr/moduline/python/make-agent.py
+	cp /usr/moduline/python/makeAgent.py /root/controller_scripts/usr/moduline/python/makeAgent.py
 
 	cp /lib/systemd/system/go-bluetooth.service /root/controller_scripts/lib/systemd/system/go-bluetooth.service
 
-	cp /usr/moduline/python/rfcomm-server.py /root/controller_scripts/usr/moduline/python/rfcomm-server.py
+	cp /usr/moduline/python/rfcommServer.py /root/controller_scripts/usr/moduline/python/rfcommServer.py
 
 	cp /usr/moduline/python/rfcommServerConstants.py /root/controller_scripts/usr/moduline/python/rfcommServerConstants.py
 
@@ -50,11 +50,11 @@ Pull()
 
 	cp /root/controller_scripts/usr/moduline/bash/go-bluetooth-start.sh /usr/moduline/bash/go-bluetooth-start.sh
 
-	cp /root/controller_scripts/usr/moduline/python/make-agent.py /usr/moduline/python/make-agent.py
+	cp /root/controllerScripts/usr/moduline/python/make-agent.py /usr/moduline/python/makeAgent.py
 
 	cp /root/controller_scripts/lib/systemd/system/go-bluetooth.service /lib/systemd/system/go-bluetooth.service
 
-	cp /root/controller_scripts/usr/moduline/python/rfcomm-server.py /usr/moduline/python/rfcomm-server.py
+	cp /root/controller_scripts/usr/moduline/python/rfcommServer.py /usr/moduline/python/rfcommServer.py
 
 	cp /root/controller_scripts/usr/moduline/python/rfcommServerConstants.py /usr/moduline/python/rfcommServerConstants.py
 
