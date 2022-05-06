@@ -15,4 +15,22 @@ apt install rfkill -y
 
 apt install python3-pip -y
 
+apt-get install libffi-dev
+
 apt remove hostapd -y
+
+pip3 install smbus2
+
+pip3 install requests
+
+pip3 install bluedot
+
+pip3 install PyGithub
+
+pip3 install netifaces
+
+pip3 install pyserial
+
+mkdir /etc/module-firmware-update
+
+systemctl enable go-bluetooth
