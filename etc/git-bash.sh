@@ -29,6 +29,8 @@ Commit()
 
 	cp /usr/moduline/python/rfcommServerConstants.py /root/controller_scripts/usr/moduline/python/rfcommServerConstants.py
 
+	cp /usr/moduline/python/initLed.py /root/controller_scripts/usr/moduline/python/initLed.py
+
 	cp /etc/git-bash.sh /root/controller_scripts/etc/git-bash.sh
 
 	git add /root/controller_scripts/
@@ -57,6 +59,8 @@ Pull()
 	cp /root/controller_scripts/usr/moduline/python/rfcommServer.py /usr/moduline/python/rfcommServer.py
 
 	cp /root/controller_scripts/usr/moduline/python/rfcommServerConstants.py /usr/moduline/python/rfcommServerConstants.py
+
+	cp /root/controller_scripts/usr/moduline/python/initLed.py /usr/moduline/python/initLed.py
 
 	cp /root/controller_scripts/etc/git-bash.sh /etc/git-bash.sh
 
