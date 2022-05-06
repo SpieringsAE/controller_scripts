@@ -438,7 +438,6 @@ def wireless_settings(commandnmbr, arg):
 		#give feedback to the app
 		send(chr(commandnmbr) + chr(commands.DISCONNECT_FROM_WIFI) + chr(disconnection_result))
 
-
 	#switch between access point or wifi receiver mode
 	elif level1 == commands.SWITCH_WIRELESS_MODE:
 		#to make the switch permanent all wifi connections need to have their autoconnect settings altered
