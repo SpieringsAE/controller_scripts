@@ -421,7 +421,6 @@ def wireless_settings(commandnmbr, arg):
 		#give feedback to the app
 		send(chr(commandnmbr) + chr(commands.CONNECT_TO_WIFI) + chr(connection_result))
 
-
 	#disconnect from a wifi network specified in the command argument
 	elif level1 == commands.DISCONNECT_FROM_WIFI:
 		#attempt to disconnect from specified network
