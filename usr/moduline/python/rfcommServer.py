@@ -299,12 +299,13 @@ def ethernet_settings(commandnmbr, arg):
 
 	#apply changes that were made by the user
 	elif level1 == commands.SET_ETHERNET_SETTINGS:
-		ip_line = get_line(path, "address1=")
-		with open(path, "r") as con:
-			file = con.readlines()
-			file[ip_line] = "address1=192.168." + arg + "/16\n"
-		with open(path, "w") as con:
-			con.writelines(file)
+		# ip_line = get_line(path, "address1=")
+		# with open(path, "r") as con:
+		# 	file = con.readlines()
+		# 	file[ip_line] = "address1=192.168." + arg + "/16\n"
+		# with open(path, "w") as con:
+		# 	con.writelines(file)
+		subprocess.run(["nmcli", "con", "mod", "Wired connection static", "ipv4.addresses", "192.168."+arg+"/16"])
 		if (mode == "static"):
 			subprocess.run(["nmcli", "con", "up", "Wired connection auto"])
 			time.sleep(0.5)
