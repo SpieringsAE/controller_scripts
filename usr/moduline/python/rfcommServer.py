@@ -136,34 +136,38 @@ def update_controller(commandnmbr, arg):
 	arg = arg[1:]
 	if (level1 == commands.CHECK_FOR_UPDATE):
 		file_urls = []
+		with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
+			sha = file.read()
+		if sha[-1] == "\n":
+			sha = sha[:-1]
 		if (check_connection(1)):
-			with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
-				sha = file.read()
+			
 			with open("/etc/bluetooth/accesstoken.txt", "r") as file:
 				token = file.read()
-			g = Github(token)
-			r = g.get_repo("Rick-GO/GOcontroll-Moduline")
-			cs = r.get_commits(since=r.get_commit(sha).commit.author.date,path="/usr/module-firmware")
-			first_run=0
-			global last_commit_sha
-			for c in cs:
-				if first_run==0:
-					last_commit_sha = c.sha
-					first_run += 1
-				if sha == c.sha:
-					break
-				for file in c.files:
-					if "srec" in file.filename:
-						file_urls.append(file.raw_url)
-			if len(file_urls) > 0:
-				# send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
+			try:
+				g = Github(token)
+				r = g.get_repo("Rick-GO/GOcontroll-Moduline")
+				cs = r.get_commits(since=r.get_commit(sha).commit.author.date,path="/usr/module-firmware")
+				first_run=0
+				global last_commit_sha
+				for c in cs:
+					if first_run==0:
+						last_commit_sha = c.sha
+						first_run += 1
+					if sha == c.sha:
+						break
+					for file in c.files:
+						if "srec" in file.filename:
+							file_urls.append(file.raw_url)
+			except:
 				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
+			if len(file_urls) > 0:
+				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE) + chr(commands.CONTROLLER_UPDATE_AVAILABLE))
+				#send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
 			else:
 				send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_TRUE))
 		#check_connection == False
 		else:
-			with open("/etc/module-firmware-update/lastupdatecheck.txt", "r") as file:
-				sha = file.read()
 			send(chr(commandnmbr) + chr(commands.CONTROLLER_INTERNET_ACCESS_FALSE) + sha)
 
 	#update the controller through its own network connection

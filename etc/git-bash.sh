@@ -86,5 +86,3 @@ while getopts ":hcp" option; do
 			exit;;
 	esac
 done
-
-
