@@ -141,7 +141,6 @@ def update_controller(commandnmbr, arg):
 		if sha[-1] == "\n":
 			sha = sha[:-1]
 		if (check_connection(1)):
-			
 			with open("/etc/bluetooth/accesstoken.txt", "r") as file:
 				token = file.read()
 			try:
