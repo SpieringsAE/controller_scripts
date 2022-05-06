@@ -33,6 +33,8 @@ Commit()
 
 	cp /etc/git-bash.sh /root/controller_scripts/etc/git-bash.sh
 
+	cp /etc/machine-info /root/controller_scripts/etc/machine-info
+
 	git add /root/controller_scripts/
 
 	git commit
@@ -61,6 +63,8 @@ Pull()
 	cp /root/controller_scripts/usr/moduline/python/rfcommServerConstants.py /usr/moduline/python/rfcommServerConstants.py
 
 	cp /root/controller_scripts/usr/moduline/python/initLed.py /usr/moduline/python/initLed.py
+
+	cp /root/controller_scripts/etc/machine-info /etc/machine-info
 
 	cp /root/controller_scripts/etc/git-bash.sh /etc/git-bash.sh
 
